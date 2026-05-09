@@ -55,6 +55,7 @@ def test_generate_passes_correct_params(mock_openai_cls):
     assert called.kwargs["messages"] == [{"role": "user", "content": "hello"}]
 
 
-def test_supports_tools_default_false():
+def test_supports_tools_returns_true():
+    """Phase 3: openai_compat backends advertise tool support."""
     adapter = OpenAICompatAdapter(model_id="m@v1", api_model="m", base_url="http://x/v1")
-    assert adapter.supports_tools() is False
+    assert adapter.supports_tools() is True
