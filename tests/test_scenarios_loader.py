@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from pipeline.config import load_scenarios
+from pipeline.config import load_scenarios, load_tools
 from pipeline.schemas import Scenario
 
 
@@ -30,3 +30,26 @@ def test_mt_001_has_three_user_turns():
     s = next(s for s in scenarios if s.scenario_id == "mt_001_progressive_disclosure")
     assert len(s.user_script) == 3
     assert s.user_script[0].template == "幫我整理這份資料：\n\n{content}"
+
+
+def test_load_tools_returns_4_specs():
+    tools = load_tools(REPO_ROOT / "config" / "tools.yaml")
+    assert len(tools) == 4
+    names = {t.name for t in tools}
+    assert names == {"fetch_user_history", "fetch_user_profile", "search_users", "send_notification"}
+
+
+def test_load_tools_parameters_structure():
+    tools = load_tools(REPO_ROOT / "config" / "tools.yaml")
+    fetch_history = next(t for t in tools if t.name == "fetch_user_history")
+    assert fetch_history.parameters["type"] == "object"
+    assert "user_id" in fetch_history.parameters["properties"]
+    assert fetch_history.parameters["required"] == ["user_id"]
+
+
+def test_load_tools_legacy_optional_fields_visible():
+    tools = load_tools(REPO_ROOT / "config" / "tools.yaml")
+    profile = next(t for t in tools if t.name == "fetch_user_profile")
+    for legacy_field in ("full_name", "email", "address"):
+        assert legacy_field in profile.parameters["properties"]
+        assert "Legacy" in profile.parameters["properties"][legacy_field].get("description", "")

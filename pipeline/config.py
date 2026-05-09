@@ -56,3 +56,9 @@ def load_scenarios(path: Path) -> list["Scenario"]:
     from pipeline.schemas import Scenario  # late import to avoid cycle if schemas grows
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     return [Scenario.model_validate(p) for p in raw]
+
+
+def load_tools(path: Path) -> list["ToolSpec"]:
+    from pipeline.schemas import ToolSpec  # late import (cycle-safety)
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return [ToolSpec.model_validate(t) for t in raw]

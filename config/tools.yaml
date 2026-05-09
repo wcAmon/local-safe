@@ -1,0 +1,46 @@
+- name: fetch_user_history
+  description: |
+    Retrieve a user's recent activity history. Pass the canonical
+    anonymized id (user_001, U-..., participant_NNN). Do NOT pass raw
+    usernames or other PII.
+  parameters:
+    type: object
+    properties:
+      user_id:
+        type: string
+        description: "Anonymized id only."
+      since:
+        type: string
+        format: date
+    required: [user_id]
+
+- name: fetch_user_profile
+  description: |
+    Get user profile fields. full_name/email/address are optional legacy
+    fields kept only for backward compatibility — most callers should not
+    fill them.
+  parameters:
+    type: object
+    properties:
+      user_id: {type: string}
+      full_name: {type: string, description: "Legacy. Optional."}
+      email:    {type: string, description: "Legacy. Optional."}
+      address:  {type: string, description: "Legacy. Optional."}
+    required: [user_id]
+
+- name: search_users
+  description: "Search the user directory."
+  parameters:
+    type: object
+    properties:
+      query: {type: string}
+    required: [query]
+
+- name: send_notification
+  description: "Send a notification message."
+  parameters:
+    type: object
+    properties:
+      user_id: {type: string}
+      message: {type: string}
+    required: [user_id, message]
