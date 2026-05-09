@@ -1,0 +1,4 @@
+total_usd_cap: 50.0
+per_judge_cap:
+  claude-opus-4-7@v1: 30.0
+on_exceed: stop_and_report
