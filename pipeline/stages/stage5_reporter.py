@@ -83,6 +83,9 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
                         cell_str = _format_cell(c, sig)
                         if c.judge_agreement and c.judge_agreement.status == "unreliable":
                             cell_str += " ⚠️"
+                        # Phase 3: append [tested:...] for cells with tested_dimensions
+                        if c.tested_dimensions:
+                            cell_str += f" [tested: {', '.join(c.tested_dimensions)}]"
                         row.append(cell_str)
                 lines.append("| " + " | ".join(row) + " |")
             lines.append("")

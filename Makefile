@@ -2,7 +2,7 @@ PYTHON := uv run python
 CLI    := $(PYTHON) -m pipeline.cli
 REDDIT ?= tests/fixtures/tiny_reddit.jsonl
 
-.PHONY: help test samples samples-multi run run-multi-turn judge-rule judge-llm judge-llm-all score report all clean-artifacts
+.PHONY: help test samples samples-multi run run-multi-turn run-agent-loop agent judge-rule judge-llm judge-llm-all score report all clean-artifacts
 
 help:
 	@echo "Targets:"
@@ -11,12 +11,14 @@ help:
 	@echo "  samples-multi     Stage 1 with --multi-thread flag"
 	@echo "  run               Stage 2 — single-shot inference (under_test models)"
 	@echo "  run-multi-turn    Stage 2b — multi-turn scenarios (under_test models)"
+	@echo "  run-agent-loop    Stage 2c — agent_loop scenarios (under_test models)"
+	@echo "  agent             Alias for run-agent-loop"
 	@echo "  judge-rule        Stage 3a — deterministic rule judge"
 	@echo "  judge-llm         Stage 3b — LLM judge gpt-oss-120b@v1"
 	@echo "  judge-llm-all     Stage 3b — all non-rule judges from models.yaml"
 	@echo "  score             Stage 4 — aggregate"
 	@echo "  report            Stage 5 — markdown leaderboard"
-	@echo "  all               samples-multi + run + run-multi-turn + judge-rule + judge-llm-all + score + report"
+	@echo "  all               samples-multi + run + run-multi-turn + run-agent-loop + judge-rule + judge-llm-all + score + report"
 	@echo "  clean-artifacts   remove artifacts/ and vault/ contents (KEEP .gitkeep)"
 
 test:
@@ -34,6 +36,12 @@ run:
 run-multi-turn:
 	$(CLI) run-multi-turn
 
+run-agent-loop:
+	$(CLI) run-agent-loop
+
+# Convenience alias
+agent: run-agent-loop
+
 judge-rule:
 	$(CLI) judge-rule
 
@@ -49,7 +57,7 @@ score:
 report:
 	$(CLI) report
 
-all: samples-multi run run-multi-turn judge-rule judge-llm-all score report
+all: samples-multi run run-multi-turn run-agent-loop judge-rule judge-llm-all score report
 
 clean-artifacts:
 	find vault     -mindepth 1 ! -name .gitkeep -delete

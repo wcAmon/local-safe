@@ -4,6 +4,7 @@ Subcommands:
   build-samples         Stage 1
   run                   Stage 2 (single-shot, all under_test models)
   run-multi-turn        Stage 2b (multi-turn, all under_test models)
+  run-agent-loop        Stage 2c (agent_loop, all under_test models)
   judge-rule            Stage 3a
   judge-llm             Stage 3b for a specific judge model_id
   judge-llm-all         Stage 3b for all non-rule judges
@@ -121,6 +122,28 @@ def cmd_run_multi_turn(args: argparse.Namespace) -> None:
     print(f"Total new traces: {total}")
 
 
+def cmd_run_agent_loop(args):
+    """Runs agent_loop driver across scenarios.yaml × under_test models."""
+    from pipeline.config import load_scenarios, load_tools
+    from pipeline.runner.drivers.agent_loop import run_agent_loop
+    models_cfg = load_models(DEFAULT_CONFIG / "models.yaml")
+    scenarios = load_scenarios(DEFAULT_CONFIG / "scenarios.yaml")
+    tools = {t.name: t for t in load_tools(DEFAULT_CONFIG / "tools.yaml")}
+    samples = {s.sample_id: s for s in read_jsonl(DEFAULT_VAULT / "samples_raw.jsonl", Sample)}
+    salt = os.environ.get("LOCAL_SAFE_VAULT_KEY", "phase1-default-salt")
+    total = 0
+    for model_cfg in models_cfg.under_test:
+        adapter = _adapter_for(model_cfg)
+        n = run_agent_loop(
+            adapter=adapter, model_cfg=model_cfg, scenarios=scenarios,
+            samples_by_id=samples, tool_specs=tools,
+            vault_dir=DEFAULT_VAULT, artifacts_dir=DEFAULT_ARTIFACTS, salt=salt,
+        )
+        print(f"[{model_cfg.model_id}] added {n} agent traces")
+        total += n
+    print(f"Total new agent traces: {total}")
+
+
 def cmd_judge_llm_all(args: argparse.Namespace) -> None:
     """Runs every non-rule judge in models.yaml against existing outputs and traces."""
     from pipeline.serving.budget import BudgetGuard
@@ -128,6 +151,11 @@ def cmd_judge_llm_all(args: argparse.Namespace) -> None:
     guard = (BudgetGuard.from_config(DEFAULT_CONFIG / "budget.yaml",
                                        DEFAULT_ARTIFACTS / "cost.jsonl")
              if (DEFAULT_CONFIG / "budget.yaml").exists() else None)
+
+    # Phase 3: rubric.v2 covers all dimensions and routes by tested_dimensions
+    rubric_path = DEFAULT_CONFIG / "rubric.v2.yaml"
+    if not rubric_path.exists():
+        rubric_path = DEFAULT_CONFIG / "rubric.v1.yaml"
 
     for judge_cfg in models_cfg.judges:
         if judge_cfg.backend == "rule":
@@ -137,7 +165,7 @@ def cmd_judge_llm_all(args: argparse.Namespace) -> None:
             continue
         adapter = _adapter_for(judge_cfg)
         n = run_llm_judge(adapter=adapter, judge_cfg=judge_cfg,
-                           rubric_path=DEFAULT_CONFIG / "rubric.v1.yaml",
+                           rubric_path=rubric_path,
                            vault_dir=DEFAULT_VAULT, artifacts_dir=DEFAULT_ARTIFACTS,
                            budget_guard=guard)
         print(f"[{judge_cfg.model_id}] added {n} judgments")
@@ -172,6 +200,9 @@ def main(argv: list[str] | None = None) -> None:
 
     p_rmt = sub.add_parser("run-multi-turn", help="Stage 2b: run multi-turn scenarios")
     p_rmt.set_defaults(func=cmd_run_multi_turn)
+
+    p_rag = sub.add_parser("run-agent-loop", help="Stage 2c: run agent_loop scenarios")
+    p_rag.set_defaults(func=cmd_run_agent_loop)
 
     p_jr = sub.add_parser("judge-rule", help="Stage 3a: rule-based judging")
     p_jr.set_defaults(func=cmd_judge_rule)

@@ -98,6 +98,29 @@ GovernanceAction = Literal[
 ]
 
 
+class ToolSpec(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class ToolCall(BaseModel):
+    tool_name: str
+    arguments: dict[str, Any]
+
+
+class ToolResult(BaseModel):
+    tool_name: str
+    output: str
+    is_error: bool = False
+
+
+class MockReturn(BaseModel):
+    args: dict[str, Any] = Field(default_factory=dict)
+    output: str
+    is_error: bool = False
+
+
 class Step(BaseModel):
     step: int
     kind: Literal["input", "output"]
@@ -113,6 +136,8 @@ class Step(BaseModel):
     leaked_pii_refs: list[str] = Field(default_factory=list)
     governance_actions: list[GovernanceAction] = Field(default_factory=list)
     content_referenced: str
+    tool_call: ToolCall | None = None
+    tool_result: ToolResult | None = None
 
 
 class ExposureLedgerEntry(BaseModel):
@@ -133,6 +158,7 @@ class Trace(BaseModel):
     steps: list[Step]
     exposure_ledger: dict[str, ExposureLedgerEntry] = Field(default_factory=dict)
     metadata: OutputMeta
+    tested_dimensions: list[str] = Field(default_factory=list)
 
 
 class UserTurn(BaseModel):
@@ -144,7 +170,12 @@ class Scenario(BaseModel):
     scenario_id: str
     session_kind: SessionKind
     sample_id: str | None = None
-    user_script: list[UserTurn]
+    user_script: list[UserTurn] = Field(default_factory=list)
+    initial_prompt: str | None = None
+    tools_used: list[str] = Field(default_factory=list)
+    mock_returns: dict[str, list[MockReturn]] = Field(default_factory=dict)
+    max_steps: int | None = None
+    tested_dimensions: list[str] = Field(default_factory=list)
 
 
 class JudgeAgreement(BaseModel):
@@ -163,3 +194,4 @@ class CellScore(BaseModel):
     n_samples: int
     metrics: dict[str, CellMetric]
     judge_agreement: JudgeAgreement | None = None
+    tested_dimensions: list[str] = Field(default_factory=list)

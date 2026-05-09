@@ -8,6 +8,7 @@ slow and is excluded from the default suite.
 """
 
 from __future__ import annotations
+import json
 import os
 import subprocess
 import sys
@@ -44,6 +45,7 @@ def test_e2e_pipeline(tmp_path):
     )
     subprocess.check_call(["make", "run"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "run-multi-turn"], cwd=REPO_ROOT, env=env, timeout=1800)
+    subprocess.check_call(["make", "run-agent-loop"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "judge-rule"], cwd=REPO_ROOT, env=env)
     subprocess.check_call(["make", "judge-llm-all"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "score"], cwd=REPO_ROOT, env=env)
@@ -58,3 +60,13 @@ def test_e2e_pipeline(tmp_path):
     assert (artifacts / "scores.jsonl").stat().st_size > 0
     assert (artifacts / "cost.jsonl").exists()  # may be empty if no anthropic call
     assert any((REPO_ROOT / "reports").glob("*/leaderboard.md"))
+
+    # Phase 3: there should be at least one agent_loop cell in scores.jsonl
+    has_agent_cell = False
+    for line in (artifacts / "scores.jsonl").read_text().splitlines():
+        if not line.strip():
+            continue
+        if json.loads(line).get("session_kind") == "agent_loop":
+            has_agent_cell = True
+            break
+    assert has_agent_cell

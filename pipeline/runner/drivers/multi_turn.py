@@ -91,6 +91,11 @@ def run_multi_turn(
     redacted_traces: list[Trace] = []
 
     for scenario in scenarios:
+        # Phase 3: skip non-multi_turn scenarios (agent_loop has its own driver).
+        # Without this filter, agent_loop scenarios produce empty 0-step traces
+        # because their user_script is empty.
+        if scenario.session_kind != "multi_turn":
+            continue
         tid = trace_id_for(model_cfg.model_id, scenario.scenario_id, seed)
         if tid in existing_raw:
             continue

@@ -21,9 +21,26 @@ if TYPE_CHECKING:
     from pipeline.serving.budget import BudgetGuard
 
 
-SCORE_KEYS = ["username_replaced", "id_format_used",
-              "governance_depth", "fingerprint_warning",
-              "multi_step_consistency"]
+SCORE_KEYS_PHASE2 = ["username_replaced", "id_format_used",
+                     "governance_depth", "fingerprint_warning",
+                     "multi_step_consistency"]
+SCORE_KEYS_PHASE3 = SCORE_KEYS_PHASE2 + [
+    "tool_args_minimal", "tool_result_governance", "prompt_injection_resisted",
+]
+SCORE_KEYS = SCORE_KEYS_PHASE3                     # superset
+
+LLM_SCORED_DIMENSIONS = frozenset({
+    "governance_depth", "fingerprint_warning", "multi_step_consistency",
+    "tool_args_minimal", "tool_result_governance", "prompt_injection_resisted",
+})
+
+DEFAULT_DIMENSIONS_BY_KIND = {
+    "single_shot": ["username_replaced", "id_format_used",
+                     "governance_depth", "fingerprint_warning"],
+    "multi_turn":  ["username_replaced", "id_format_used",
+                     "governance_depth", "fingerprint_warning",
+                     "multi_step_consistency"],
+}
 
 
 def _judgment_id(output_id: str, judge_id: str, rubric_version: str) -> str:
@@ -98,10 +115,17 @@ def run_llm_judge(
         if budget_guard and not budget_guard.check_before_call(judge_cfg.model_id):
             break        # stop_and_report; partial judgments still get appended below
         sample = samples[output.sample_id]
-        user_msg = user_template.format(
-            referenced_input=sample.content,
-            redacted_output=output.response,
-        )
+        if "{transcript}" in user_template:        # rubric.v2 path
+            user_msg = user_template.format(
+                referenced_input=sample.content,
+                transcript=output.response,
+                dimensions_csv=", ".join(DEFAULT_DIMENSIONS_BY_KIND["single_shot"]),
+            )
+        else:                                        # rubric.v1 path
+            user_msg = user_template.format(
+                referenced_input=sample.content,
+                redacted_output=output.response,
+            )
         resp = adapter.generate(
             [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
             params=judge_cfg.params, request_id=f"judge-{output_id}",
@@ -161,8 +185,24 @@ def run_llm_judge(
         if trace.sample_id and trace.sample_id in samples_for_traces:
             sample_text = samples_for_traces[trace.sample_id].content
 
-        user_msg = user_template.format(referenced_input=sample_text or "(no shared sample)",
-                                          redacted_output=transcript)
+        # Determine which dimensions to ask LLM about
+        trace_dims = trace.tested_dimensions or DEFAULT_DIMENSIONS_BY_KIND.get(trace.session_kind, [])
+        llm_dims = [d for d in trace_dims if d in LLM_SCORED_DIMENSIONS]
+        if not llm_dims:
+            # Nothing for this LLM judge to score on this trace; skip the call entirely.
+            continue
+
+        if "{transcript}" in user_template:        # rubric.v2 path
+            user_msg = user_template.format(
+                referenced_input=sample_text or "(no shared sample)",
+                transcript=transcript,
+                dimensions_csv=", ".join(llm_dims),
+            )
+        else:                                        # rubric.v1 path (Phase 2 backward compat)
+            user_msg = user_template.format(
+                referenced_input=sample_text or "(no shared sample)",
+                redacted_output=transcript,
+            )
         resp = adapter.generate(
             [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
             params=judge_cfg.params, request_id=f"judge-{trace.trace_id}",

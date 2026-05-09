@@ -5,6 +5,7 @@ import time
 from typing import Any
 from anthropic import Anthropic
 from .base import Message, ModelResponse
+from pipeline.schemas import ToolCall, ToolSpec
 
 
 # Per-million-token pricing (USD) as of 2026-05.
@@ -50,11 +51,11 @@ class AnthropicAdapter:
         self._client = Anthropic(api_key=api_key)
 
     def supports_tools(self) -> bool:
-        # Phase 2 single_shot/multi_turn does not exercise tool use.
-        return False
+        return True
 
     def generate(
-        self, messages: list[Message], *, params: dict, request_id: str
+        self, messages: list[Message], *, params: dict, request_id: str,
+        tools: list[ToolSpec] | None = None,
     ) -> ModelResponse:
         sys_text = "\n\n".join(m.content for m in messages if m.role == "system")
         chat = [{"role": m.role, "content": m.content}
@@ -75,12 +76,28 @@ class AnthropicAdapter:
                 kwargs["system"] = sys_text
         if "temperature" in params:
             kwargs["temperature"] = params["temperature"]
+        if tools:
+            kwargs["tools"] = [{
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.parameters,   # Anthropic uses input_schema (vs OpenAI's parameters)
+            } for t in tools]
 
         t0 = time.perf_counter()
         resp = self._client.messages.create(**kwargs)
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
-        text_parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+        text_parts = []
+        tool_calls: list[ToolCall] = []
+        for block in resp.content:
+            btype = getattr(block, "type", None)
+            if btype == "text":
+                text_parts.append(block.text)
+            elif btype == "tool_use":
+                tool_calls.append(ToolCall(
+                    tool_name=block.name,
+                    arguments=dict(block.input),
+                ))
         content = "".join(text_parts)
         cost = _estimate_cost(self.api_model, resp.usage)
 
@@ -96,5 +113,12 @@ class AnthropicAdapter:
                 "request_id": request_id,
                 "cache_creation_input_tokens": getattr(resp.usage, "cache_creation_input_tokens", 0),
                 "cache_read_input_tokens": getattr(resp.usage, "cache_read_input_tokens", 0),
+                "anthropic_content": [
+                    {"type": "text", "text": b.text} if getattr(b, "type", None) == "text"
+                    else {"type": "tool_use", "id": getattr(b, "id", None),
+                          "name": b.name, "input": dict(b.input)}
+                    for b in resp.content
+                ],
             },
+            tool_calls=tool_calls,
         )

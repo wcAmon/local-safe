@@ -134,3 +134,79 @@ def test_cell_score_phase2_fields():
     assert cs.judge_agreement is None
     cs.judge_agreement = JudgeAgreement(fleiss_kappa=0.7, status="reliable", n_raters=2)
     assert cs.judge_agreement.status == "reliable"
+
+
+from pipeline.schemas import (
+    ToolSpec, ToolCall, ToolResult, MockReturn,
+)
+
+
+def test_tool_spec_minimum_valid():
+    t = ToolSpec(name="fetch_user_history",
+                  description="Get history",
+                  parameters={"type": "object", "properties": {"user_id": {"type": "string"}},
+                              "required": ["user_id"]})
+    assert t.name == "fetch_user_history"
+
+
+def test_tool_call_minimum_valid():
+    c = ToolCall(tool_name="fetch_user_history", arguments={"user_id": "user_001"})
+    assert c.arguments["user_id"] == "user_001"
+
+
+def test_tool_result_default_not_error():
+    r = ToolResult(tool_name="fetch_user_history", output="data")
+    assert r.is_error is False
+
+
+def test_mock_return_default_args_empty():
+    m = MockReturn(output="default response")
+    assert m.args == {}
+    assert m.is_error is False
+
+
+def test_step_optional_tool_fields():
+    s = Step(step=1, kind="output", subkind="tool_call", content_referenced="",
+              tool_call=ToolCall(tool_name="fetch_user_history", arguments={"user_id": "user_001"}))
+    assert s.tool_call.tool_name == "fetch_user_history"
+    assert s.tool_result is None
+
+
+def test_scenario_phase3_fields():
+    s = Scenario(
+        scenario_id="ag_001", session_kind="agent_loop",
+        sample_id="rd_p001_singlepost",
+        initial_prompt="please call fetch_user_history",
+        tools_used=["fetch_user_history"],
+        max_steps=4,
+        tested_dimensions=["tool_input_clean"],
+        mock_returns={
+            "fetch_user_history": [
+                MockReturn(args={"user_id": "user_001"}, output="ok"),
+                MockReturn(output="default"),
+            ]
+        },
+    )
+    assert s.session_kind == "agent_loop"
+    assert s.tested_dimensions == ["tool_input_clean"]
+    assert s.mock_returns["fetch_user_history"][1].args == {}
+
+
+def test_trace_tested_dimensions_default_empty():
+    t = Trace(
+        trace_id="abc", session_kind="agent_loop",
+        model_id="m@v1", scenario_id="ag_001",
+        steps=[Step(step=0, kind="input", subkind="user_message", content_referenced="hi")],
+        metadata=OutputMeta(latency_ms=1, tokens_in=1, tokens_out=1, finish_reason="stop", ran_at="2026-05-10T00:00:00Z"),
+    )
+    assert t.tested_dimensions == []
+
+
+def test_cell_score_tested_dimensions_default_empty():
+    cs = CellScore(
+        cell_id="m@v1|ag_001|single_post|only_username|agent_loop",
+        model_id="m@v1", prompt_or_scenario_id="ag_001",
+        complexity="single_post", bucket="only_username",
+        session_kind="agent_loop", n_samples=1, metrics={},
+    )
+    assert cs.tested_dimensions == []
