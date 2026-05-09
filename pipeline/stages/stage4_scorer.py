@@ -1,66 +1,71 @@
 """Stage 4 — aggregate judgments into per-cell scores.
 
-A "cell" = (model_id, prompt_id, complexity, bucket).
+A "cell" = (model_id, prompt_or_scenario_id, complexity, bucket, session_kind).
 Within a cell:
-- For each output, combine per-judge scores using weights.
+- For each output/trace, combine per-judge scores using weights.
 - Then compute mean and 95% CI across the cell's outputs.
 
-Phase 1 weights:
-- Hard (username_replaced, id_format_used): rule 0.4 + sum(LLM) 0.6
-  (with one LLM judge in Phase 1 → LLM weight = 0.6.)
-- Soft (governance_depth, fingerprint_warning): equal weight across LLM
-  judges only; rule does not contribute.
+Phase 2 weights (spec §9.2):
+- Hard (username_replaced, id_format_used): rule 0.4 + LLM total 0.6
+  (split equally across LLM judges that scored this signal.)
+- Soft (governance_depth, fingerprint_warning, multi_step_consistency):
+  equal weight across LLM judges only; rule does not contribute.
+- id_consistency: rule-only signal.
 """
 
 from __future__ import annotations
 import math
 from collections import defaultdict
 from pathlib import Path
-from pipeline.schemas import Output, Sample, Judgment, CellScore, CellMetric
+from typing import Literal
+from pipeline.schemas import (
+    Output, Sample, Judgment, CellScore, CellMetric, JudgeAgreement,
+)
 from pipeline.jsonl_io import read_jsonl, write_jsonl
 
 
 HARD_SIGNALS = ("username_replaced", "id_format_used")
-SOFT_SIGNALS = ("governance_depth", "fingerprint_warning")
+SOFT_SIGNALS = ("governance_depth", "fingerprint_warning", "multi_step_consistency")
 ALL_SIGNALS = HARD_SIGNALS + SOFT_SIGNALS
 
 RULE_JUDGE_ID = "rule_v1"
 RULE_WEIGHT_HARD = 0.4
-LLM_WEIGHT_HARD_TOTAL = 0.6
-# Phase 1 single LLM judge → LLM gets full 0.6 share. With 2 LLM judges
-# (Phase 2), each gets 0.3. We compute per-cell based on which LLM judges
-# actually appear.
+LLM_WEIGHT_HARD_TOTAL = 0.6     # split equally across LLM judges that scored
 
 
 def _combine_per_output_scores(judgments_for_output: list[Judgment]) -> dict[str, float]:
     """Apply rule + LLM weights to one output's judgments. Returns per-signal score."""
     rule_scores: dict[str, float] = {}
     llm_scores: dict[str, list[float]] = defaultdict(list)
+    n_llm_for_signal: dict[str, int] = defaultdict(int)
     for j in judgments_for_output:
         if j.judge_id == RULE_JUDGE_ID:
-            for s in HARD_SIGNALS:
+            for s in HARD_SIGNALS + ("id_consistency",):
                 if s in j.scores:
                     rule_scores[s] = j.scores[s].score
         else:
             for s in ALL_SIGNALS:
                 if s in j.scores:
                     llm_scores[s].append(j.scores[s].score)
+                    n_llm_for_signal[s] += 1
 
     out: dict[str, float] = {}
     for s in HARD_SIGNALS:
-        rule_part = rule_scores.get(s, 0.0) * RULE_WEIGHT_HARD if s in rule_scores else 0.0
-        if llm_scores[s]:
-            llm_mean = sum(llm_scores[s]) / len(llm_scores[s])
-            llm_part = llm_mean * LLM_WEIGHT_HARD_TOTAL
-            # If rule didn't score (shouldn't happen for hard signals), renormalize.
-            if s not in rule_scores:
-                out[s] = llm_mean  # fall back to pure LLM
-            else:
-                out[s] = rule_part + llm_part
+        n = n_llm_for_signal[s]
+        if rule_scores.get(s) is not None and n > 0:
+            llm_mean = sum(llm_scores[s]) / n
+            out[s] = rule_scores[s] * RULE_WEIGHT_HARD + llm_mean * LLM_WEIGHT_HARD_TOTAL
+        elif rule_scores.get(s) is not None:
+            out[s] = rule_scores[s]
+        elif n > 0:
+            out[s] = sum(llm_scores[s]) / n
         else:
-            out[s] = rule_scores.get(s, 0.0)
+            out[s] = 0.0
     for s in SOFT_SIGNALS:
-        out[s] = (sum(llm_scores[s]) / len(llm_scores[s])) if llm_scores[s] else 0.0
+        n = n_llm_for_signal[s]
+        out[s] = (sum(llm_scores[s]) / n) if n > 0 else 0.0
+    if "id_consistency" in rule_scores:
+        out["id_consistency"] = rule_scores["id_consistency"]
     return out
 
 
@@ -81,30 +86,85 @@ def run_scorer(*, artifacts_dir: Path) -> int:
     samples = {s.sample_id: s for s in read_jsonl(artifacts_dir / "samples_referenced.jsonl", Sample)}
     outputs = list(read_jsonl(artifacts_dir / "outputs_redacted.jsonl", Output))
 
-    judgments_by_output: dict[str, list[Judgment]] = defaultdict(list)
-    for j in read_jsonl(artifacts_dir / "judgments.jsonl", Judgment):
-        judgments_by_output[j.output_id].append(j)
+    # Phase 2 — also read traces
+    from pipeline.schemas import Trace
+    traces = list(read_jsonl(artifacts_dir / "traces.jsonl", Trace))
 
-    # Aggregate per-output combined scores by cell
-    cell_to_scores: dict[tuple[str, str, str, str], list[dict[str, float]]] = defaultdict(list)
+    judgments_by_id: dict[str, list[Judgment]] = defaultdict(list)
+    for j in read_jsonl(artifacts_dir / "judgments.jsonl", Judgment):
+        judgments_by_id[j.output_id].append(j)
+
+    # Cell key: (model, prompt_or_scenario_id, complexity, bucket, session_kind)
+    cell_to_combined: dict[tuple, list[dict[str, float]]] = defaultdict(list)
+    cell_to_llm_scores: dict[tuple, dict[str, list[list[float]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+
+    def _record_cell(key, combined, judgments):
+        cell_to_combined[key].append(combined)
+        # Capture per-rater scores per signal for kappa later (LLM only).
+        per_signal_per_rater: dict[str, dict[str, float]] = defaultdict(dict)
+        for j in judgments:
+            if j.judge_id == RULE_JUDGE_ID:
+                continue
+            for s in ALL_SIGNALS:
+                if s in j.scores:
+                    per_signal_per_rater[s][j.judge_id] = j.scores[s].score
+        for s, raters in per_signal_per_rater.items():
+            cell_to_llm_scores[key][s].append([raters[k] for k in sorted(raters.keys())])
+
     for o in outputs:
-        sample = samples[o.sample_id]
-        cell_key = (o.model_id, o.prompt_id, sample.complexity, sample.bucket)
-        combined = _combine_per_output_scores(judgments_by_output[o.output_id])
-        cell_to_scores[cell_key].append(combined)
+        sample = samples.get(o.sample_id)
+        if sample is None:
+            continue
+        key = (o.model_id, o.prompt_id, sample.complexity, sample.bucket, "single_shot")
+        combined = _combine_per_output_scores(judgments_by_id[o.output_id])
+        _record_cell(key, combined, judgments_by_id[o.output_id])
+
+    for t in traces:
+        sample = samples.get(t.sample_id) if t.sample_id else None
+        complexity = sample.complexity if sample else "single_post"
+        bucket = sample.bucket if sample else "only_username"
+        key = (t.model_id, t.scenario_id, complexity, bucket, t.session_kind)
+        combined = _combine_per_output_scores(judgments_by_id[t.trace_id])
+        _record_cell(key, combined, judgments_by_id[t.trace_id])
 
     cells: list[CellScore] = []
-    for (model_id, prompt_id, complexity, bucket), score_list in cell_to_scores.items():
+    for (model_id, pos_id, complexity, bucket, session_kind), score_list in cell_to_combined.items():
+        signals_seen = set()
+        for s in score_list:
+            signals_seen.update(s.keys())
         metrics: dict[str, CellMetric] = {}
-        for sig in ALL_SIGNALS:
+        for sig in signals_seen:
             vals = [s.get(sig, 0.0) for s in score_list]
             mean = sum(vals) / len(vals)
-            ci = _ci95(vals)
-            metrics[sig] = CellMetric(mean=mean, ci95=ci)
-        cell_id = f"{model_id}|{prompt_id}|{complexity}|{bucket}"
+            metrics[sig] = CellMetric(mean=mean, ci95=_ci95(vals))
+
+        # Compute Fleiss kappa across LLM judges, averaged over signals where >=2 LLM judges scored.
+        agreement: JudgeAgreement | None = None
+        per_signal_kappas: list[float] = []
+        for sig, items in cell_to_llm_scores[(model_id, pos_id, complexity, bucket, session_kind)].items():
+            if items and len(items[0]) >= 2:
+                k = fleiss_kappa(items)
+                if not math.isnan(k):
+                    per_signal_kappas.append(k)
+        if per_signal_kappas:
+            avg_k = sum(per_signal_kappas) / len(per_signal_kappas)
+            n_raters = max(
+                len(items[0])
+                for items in cell_to_llm_scores[(model_id, pos_id, complexity, bucket, session_kind)].values()
+                if items
+            )
+            status: Literal["reliable", "moderate", "unreliable"] = (
+                "reliable" if avg_k >= 0.6 else "moderate" if avg_k >= 0.4 else "unreliable"
+            )
+            agreement = JudgeAgreement(fleiss_kappa=avg_k, status=status, n_raters=n_raters)
+
+        cell_id = f"{model_id}|{pos_id}|{complexity}|{bucket}|{session_kind}"
         cells.append(CellScore(
-            cell_id=cell_id, model_id=model_id, prompt_id=prompt_id,
-            complexity=complexity, bucket=bucket, n_samples=len(score_list), metrics=metrics,
+            cell_id=cell_id, model_id=model_id, prompt_or_scenario_id=pos_id,
+            complexity=complexity, bucket=bucket, session_kind=session_kind,
+            n_samples=len(score_list), metrics=metrics, judge_agreement=agreement,
         ))
 
     write_jsonl(artifacts_dir / "scores.jsonl", cells)

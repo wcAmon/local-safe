@@ -45,23 +45,23 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
             continue
         top = max(by_signal[sig], key=lambda c: c.metrics[sig].mean)
         lines.append(f"- **{sig}**: Top: `{top.model_id}` "
-                     f"({top.prompt_id} / {top.bucket}) — {_format_cell(top, sig)}")
+                     f"({top.prompt_or_scenario_id} / {top.bucket}) — {_format_cell(top, sig)}")
     lines.append("")
 
     # Per-signal table grouped by (prompt, bucket); rows = model
     for sig in SIGNALS:
         lines.append(f"## `{sig}`")
         lines.append("")
-        # Pivot: rows = model_id, cols = (prompt_id|complexity|bucket)
+        # Pivot: rows = model_id, cols = (prompt_or_scenario_id|complexity|bucket)
         col_keys: list[tuple[str, str, str]] = sorted({
-            (c.prompt_id, c.complexity, c.bucket) for c in cells
+            (c.prompt_or_scenario_id, c.complexity, c.bucket) for c in cells
         })
         models = sorted({c.model_id for c in cells})
         header = "| Model | " + " | ".join(f"{p}/{b}" for (p, _co, b) in col_keys) + " |"
         sep = "|" + "|".join(["---"] * (1 + len(col_keys))) + "|"
         lines.append(header)
         lines.append(sep)
-        cell_lookup = {(c.model_id, c.prompt_id, c.complexity, c.bucket): c for c in cells}
+        cell_lookup = {(c.model_id, c.prompt_or_scenario_id, c.complexity, c.bucket): c for c in cells}
         for m in models:
             row = [f"`{m}`"]
             for p, co, b in col_keys:
