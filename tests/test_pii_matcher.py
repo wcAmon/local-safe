@@ -66,3 +66,29 @@ def test_redact_full_overrides_partial():
     token = m.raw_to_token["alice_92"]
     assert f"<<LEAKED:{token[2:-2]}>>" in redacted
     assert "<<PARTIAL_LEAK:" not in redacted
+
+
+def test_extract_known_refs_finds_present():
+    m = PIIMatcher.build(
+        entries=[("alice_92", PIIKind.USERNAME), ("新莊", PIIKind.LOCATION)],
+        salt="t",
+    )
+    refs = m.extract_known_refs("alice_92 went to 新莊 today")
+    assert refs == {m.raw_to_token["alice_92"], m.raw_to_token["新莊"]}
+
+
+def test_extract_known_refs_returns_empty_for_no_match():
+    m = PIIMatcher.build(entries=[("alice_92", PIIKind.USERNAME)], salt="t")
+    refs = m.extract_known_refs("no PII here")
+    assert refs == set()
+
+
+def test_extract_known_refs_ignores_token_strings_themselves():
+    """If text already contains <<U-...>> tokens (from referenced sample),
+    we should not double-count them as new exposures."""
+    m = PIIMatcher.build(entries=[("alice_92", PIIKind.USERNAME)], salt="t")
+    tok = m.raw_to_token["alice_92"]
+    refs = m.extract_known_refs(f"already-tokenized: {tok}")
+    # The token string itself is not the raw — should not match.
+    # alice_92 is not in the text either. So empty.
+    assert refs == set()
