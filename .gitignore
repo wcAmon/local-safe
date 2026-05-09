@@ -1,0 +1,22 @@
+# Vault — never commit raw PII or mapping
+vault/
+*.enc
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Logs / runtime
+.remember/logs/
+logs/
+reports/
+
+# OS
+.DS_Store
