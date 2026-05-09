@@ -87,8 +87,10 @@ class PIIMatcher:
                 prefix = m.group(1)
                 if len(prefix) < 4:
                     continue
-                # Skip if already-replaced; LEAKED tokens won't contain the prefix.
-                # Use word-boundary regex so we don't catch parts of other words.
+                # Word-boundary regex won't fire inside <<LEAKED:...>> markers
+                # (< and > are not word chars), so already-replaced occurrences
+                # are naturally skipped. If the prefix also appears independently
+                # elsewhere in the output, it is correctly flagged as a partial leak.
                 pattern = re.compile(rf"\b{re.escape(prefix)}\b")
                 if pattern.search(out):
                     out = pattern.sub(f"<<PARTIAL_LEAK:{inner}>>", out)
