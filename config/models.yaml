@@ -1,0 +1,30 @@
+under_test:
+  - model_id: qwen3.6-27b-q6@v1
+    backend: openai_compat
+    api_model: "qwen3.6-27b-q6"
+    base_url_env: OLLAMA_HUB_BASE_URL
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 4096
+  - model_id: gemma4-26b-a4b-it@v1
+    backend: openai_compat
+    api_model: "gemma4-26b-a4b-it"
+    base_url_env: OLLAMA_HUB_BASE_URL
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 4096
+
+judges:
+  - model_id: rule_v1
+    backend: rule
+  - model_id: gpt-oss-120b@v1
+    backend: openai_compat
+    api_model: "gpt-oss-120b"
+    base_url_env: OLLAMA_HUB_BASE_URL
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 2048
+    notes: "experimental llama.cpp; ctx <=32K, parallel=1"
