@@ -1,6 +1,6 @@
 """Pydantic schemas for every JSONL artifact in the pipeline."""
 
-from typing import Literal, Optional
+from typing import Any, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
 Bucket = Literal["only_username", "with_pii", "cross_thread", "fingerprint_rich"]
@@ -13,7 +13,7 @@ class FingerprintMarker(BaseModel):
     type: Literal["location", "occupation", "writing_style", "time_pattern", "organization", "other"]
     text: str
     span: tuple[int, int]
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class UserMention(BaseModel):
@@ -35,7 +35,7 @@ class Sample(BaseModel):
     bucket: Bucket
     content: str
     ground_truth: GroundTruth
-    source_meta: dict
+    source_meta: dict[str, Any]
 
 
 class SamplesManifest(BaseModel):

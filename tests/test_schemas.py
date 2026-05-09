@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 from pipeline.schemas import (
-    Sample, GroundTruth, FingerprintMarker, SamplesManifest,
+    Sample, GroundTruth, FingerprintMarker,
     Output, OutputMeta,
     Judgment, JudgeScore,
     CellScore, CellMetric,
