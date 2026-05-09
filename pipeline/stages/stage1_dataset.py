@@ -15,9 +15,9 @@ from pydantic import BaseModel
 from pipeline.schemas import (
     Sample, GroundTruth, FingerprintMarker, UserMention, SamplesManifest,
 )
-from pipeline.pii.tokens import PIIKind, mint_token
+from pipeline.pii.tokens import PIIKind
 from pipeline.pii.matcher import PIIMatcher
-from pipeline.jsonl_io import read_jsonl, write_jsonl
+from pipeline.jsonl_io import write_jsonl
 
 
 # Phase 1 curated fingerprint marker list. Phase 3 will replace with broader detection.
@@ -61,7 +61,7 @@ def build_samples(
     vault_dir: Path,
     artifacts_dir: Path,
     salt: str,
-    pii_markers: list[str] = None,
+    pii_markers: list[str] | None = None,
 ) -> SamplesManifest:
     pii_markers = pii_markers if pii_markers is not None else DEFAULT_PII_MARKERS
 
