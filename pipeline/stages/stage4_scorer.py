@@ -109,3 +109,48 @@ def run_scorer(*, artifacts_dir: Path) -> int:
 
     write_jsonl(artifacts_dir / "scores.jsonl", cells)
     return len(cells)
+
+
+def _discretize(score: float) -> int:
+    """Map [0,1] continuous score to {0, 1, 2} bin via round(score * 2)."""
+    clamped = max(0.0, min(1.0, score))
+    return min(2, int((clamped + 0.25) * 2))
+
+
+def fleiss_kappa(ratings_per_item: list[list[float]]) -> float:
+    """Fleiss kappa over discretized ratings (3 categories: low/mid/high).
+
+    `ratings_per_item[i][r]` = score in [0,1] from rater r on item i.
+    Each item must have the same number of raters n >= 2. Returns NaN if
+    fewer than 2 raters or no items.
+    """
+    if not ratings_per_item:
+        return math.nan
+    n = len(ratings_per_item[0])
+    if n < 2:
+        return math.nan
+    K = 3  # number of categories (0,1,2)
+    N = len(ratings_per_item)
+    # Build N×K count matrix of rater→category.
+    counts = [[0] * K for _ in range(N)]
+    for i, row in enumerate(ratings_per_item):
+        if len(row) != n:
+            return math.nan
+        for s in row:
+            counts[i][_discretize(s)] += 1
+
+    # P_i: agreement on item i.
+    P_items = []
+    for i in range(N):
+        s = sum(c * c for c in counts[i])
+        P_items.append((s - n) / (n * (n - 1)))
+    P_bar = sum(P_items) / N
+
+    # P_e: chance agreement.
+    p_j = [sum(counts[i][j] for i in range(N)) / (N * n) for j in range(K)]
+    P_e = sum(p * p for p in p_j)
+
+    if P_e >= 1.0:
+        # All raters always picked one category → agreement is by definition perfect/undefined.
+        return 1.0
+    return (P_bar - P_e) / (1.0 - P_e)
