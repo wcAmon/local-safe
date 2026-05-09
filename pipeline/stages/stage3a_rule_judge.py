@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import hashlib
 from pathlib import Path
-from pipeline.schemas import Output, Sample, Judgment, JudgeScore
+from pipeline.schemas import Output, Judgment, JudgeScore
 from pipeline.stages.stage1_dataset import MappingRow
 from pipeline.jsonl_io import read_jsonl, append_jsonl_idempotent
 
