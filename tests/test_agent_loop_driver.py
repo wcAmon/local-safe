@@ -226,3 +226,57 @@ def test_tool_input_leak_recorded_in_step(tmp_path: Path):
     t = list(read_jsonl(artifacts / "traces.jsonl", Trace))[0]
     tool_call_step = next(s for s in t.steps if s.subkind == "tool_call")
     assert "<<U-deadbe>>" in tool_call_step.leaked_pii_refs
+
+
+def test_artifacts_traces_have_no_raw_pii_in_tool_call_args(tmp_path: Path):
+    """The artifacts/traces.jsonl tool_call steps must not contain raw
+    alice_92 etc. in arguments — only token form."""
+    vault = tmp_path / "v"; artifacts = tmp_path / "a"
+    vault.mkdir(); artifacts.mkdir()
+    _matcher_setup(vault)
+    fake = MagicMock()
+    fake.model_id = "m@v1"
+    fake.generate.side_effect = [
+        ModelResponse(
+            content="", tool_calls=[ToolCall(tool_name="fetch_user_history",
+                                              arguments={"user_id": "alice_92"})],
+            latency_ms=10, tokens_in=5, tokens_out=5, finish_reason="tool_calls",
+            cost_usd=0.0, raw_meta={"openai_tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "fetch_user_history",
+                              "arguments": '{"user_id": "alice_92"}'}}
+            ]},
+        ),
+        ModelResponse(
+            content="done", tool_calls=[], latency_ms=10, tokens_in=20, tokens_out=2,
+            finish_reason="stop", cost_usd=0.0, raw_meta={},
+        ),
+    ]
+    scenario = Scenario(
+        scenario_id="ag_redact_test", session_kind="agent_loop", sample_id="rd_s1",
+        initial_prompt="x: {content}", tools_used=["fetch_user_history"],
+        max_steps=4, tested_dimensions=["tool_input_clean"],
+        mock_returns={"fetch_user_history": [
+            MockReturn(args={}, output="raw alice_92 mention from tool"),
+        ]},
+    )
+    run_agent_loop(
+        adapter=fake, model_cfg=_model_cfg(), scenarios=[scenario],
+        samples_by_id={"rd_s1": _sample()},
+        tool_specs={"fetch_user_history": _spec_fetch()},
+        vault_dir=vault, artifacts_dir=artifacts, salt="t",
+    )
+    artifact_t = list(read_jsonl(artifacts / "traces.jsonl", Trace))[0]
+    vault_t = list(read_jsonl(vault / "traces_raw.jsonl", Trace))[0]
+
+    # vault has raw; artifacts has tokens
+    tc_vault = next(s for s in vault_t.steps if s.subkind == "tool_call")
+    tc_art = next(s for s in artifact_t.steps if s.subkind == "tool_call")
+    assert tc_vault.tool_call.arguments["user_id"] == "alice_92"           # raw in vault
+    assert tc_art.tool_call.arguments["user_id"] == "<<U-deadbe>>"         # tokenized in artifacts
+
+    tr_vault = next(s for s in vault_t.steps if s.subkind == "tool_result")
+    tr_art = next(s for s in artifact_t.steps if s.subkind == "tool_result")
+    assert "alice_92" in tr_vault.tool_result.output
+    assert "alice_92" not in tr_art.tool_result.output
+    assert "<<U-deadbe>>" in tr_art.tool_result.output

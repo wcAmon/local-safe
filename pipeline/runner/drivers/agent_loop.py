@@ -150,6 +150,12 @@ def run_agent_loop(
                                 ledger[ref].first_emitted_step = len(steps_raw)
                             ledger[ref].first_leaked_step = ledger[ref].first_leaked_step or len(steps_raw)
                             ledger[ref].leak_count += 1
+                    # Redacted version of the tool_call: args go through PII matcher
+                    redacted_args = {
+                        k: matcher.to_referenced(v) if isinstance(v, str) else v
+                        for k, v in call.arguments.items()
+                    }
+                    tc_call_red = ToolCall(tool_name=call.tool_name, arguments=redacted_args)
                     tc_step_raw = Step(
                         step=len(steps_raw), kind="output", subkind="tool_call",
                         visible_pii_refs_so_far=sorted(cumulative),
@@ -158,8 +164,16 @@ def run_agent_loop(
                         content_referenced="",
                         tool_call=call,
                     )
+                    tc_step_red = Step(
+                        step=len(steps_red), kind="output", subkind="tool_call",
+                        visible_pii_refs_so_far=sorted(cumulative),
+                        emitted_pii_refs=leaked,
+                        leaked_pii_refs=leaked,
+                        content_referenced="",
+                        tool_call=tc_call_red,
+                    )
                     steps_raw.append(tc_step_raw)
-                    steps_red.append(tc_step_raw)
+                    steps_red.append(tc_step_red)
 
                     result = find_mock_return(scenario.mock_returns, call.tool_name, call.arguments)
                     if result is None:
@@ -178,12 +192,17 @@ def run_agent_loop(
                         content_referenced=result.output,    # raw goes to vault
                         tool_result=result,
                     )
+                    result_red = ToolResult(
+                        tool_name=result.tool_name,
+                        output=matcher.to_referenced(result.output),
+                        is_error=result.is_error,
+                    )
                     tr_step_red = Step(
                         step=len(steps_red), kind="input", subkind="tool_result",
                         introduced_pii_refs=sorted(new_from_tool),
                         visible_pii_refs_so_far=sorted(cumulative),
                         content_referenced=matcher.to_referenced(result.output),
-                        tool_result=result,
+                        tool_result=result_red,
                     )
                     steps_raw.append(tr_step_raw)
                     steps_red.append(tr_step_red)
