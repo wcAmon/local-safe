@@ -39,13 +39,13 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
     # Top performers (per signal, across all cells)
     by_signal: dict[str, list[CellScore]] = defaultdict(list)
     for c in cells:
-        for sig in tuple(SIGNALS) + ("multi_step_consistency", "id_consistency"):
+        for sig in tuple(SIGNALS) + ("multi_step_consistency", "id_consistency", "replaced_AND_substituted"):
             if sig in c.metrics:
                 by_signal[sig].append(c)
 
     lines.append("## Top performers")
     lines.append("")
-    for sig in list(SIGNALS) + ["multi_step_consistency", "id_consistency"]:
+    for sig in list(SIGNALS) + ["multi_step_consistency", "id_consistency", "replaced_AND_substituted"]:
         if not by_signal[sig]:
             continue
         top = max(by_signal[sig], key=lambda c: c.metrics[sig].mean)
@@ -62,7 +62,7 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
         lines.append(f"# {kind_label} Leaderboard")
         lines.append("")
         kind_cells = cells_by_kind[kind]
-        kind_signals = [sig for sig in (list(SIGNALS) + ["multi_step_consistency", "id_consistency"])
+        kind_signals = [sig for sig in (list(SIGNALS) + ["multi_step_consistency", "id_consistency", "replaced_AND_substituted"])
                           if any(sig in c.metrics for c in kind_cells)]
         for sig in kind_signals:
             lines.append(f"## `{sig}`")

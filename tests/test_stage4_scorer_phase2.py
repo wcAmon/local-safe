@@ -113,3 +113,53 @@ def test_judge_agreement_field_present(tmp_path: Path):
     assert cell.judge_agreement.n_raters == 2
     assert cell.judge_agreement.status == "reliable"
     assert cell.judge_agreement.fleiss_kappa >= 0.6
+
+
+def test_replaced_and_substituted_per_output_min(tmp_path: Path):
+    """Composite is per-output min(uname_repl, id_fmt), then mean across outputs.
+
+    Output 1: full anonymize + synthetic ID → composite 1.0
+    Output 2: full anonymize but no synthetic ID → composite 0.0 (just avoided subject)
+    Output 3: kept raw + added synthetic ID → composite 0.0 (half-job)
+    Cell mean composite: 1/3 = 0.333.
+    """
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    samples = [_sample(f"s{i}") for i in (1, 2, 3)]
+    outputs = [_output(f"o{i}", sid=f"s{i}") for i in (1, 2, 3)]
+    write_jsonl(artifacts / "samples_referenced.jsonl", samples)
+    write_jsonl(artifacts / "outputs_redacted.jsonl", outputs)
+    write_jsonl(artifacts / "traces.jsonl", [])
+    judgments = []
+    # Output 1: both 1.0 → composite 1.0
+    for jid, judge in [("jr1", "rule_v1"), ("jg1", "gpt-oss-120b@v1")]:
+        judgments.append(_judgment(jid, "o1", judge,
+                                    {"username_replaced": 1.0, "id_format_used": 1.0}))
+    # Output 2: replaced=1.0 but no ID format → composite min(1.0, 0.0) = 0.0
+    for jid, judge in [("jr2", "rule_v1"), ("jg2", "gpt-oss-120b@v1")]:
+        judgments.append(_judgment(jid, "o2", judge,
+                                    {"username_replaced": 1.0, "id_format_used": 0.0}))
+    # Output 3: leaked but used ID format → composite min(0.0, 1.0) = 0.0
+    for jid, judge in [("jr3", "rule_v1"), ("jg3", "gpt-oss-120b@v1")]:
+        judgments.append(_judgment(jid, "o3", judge,
+                                    {"username_replaced": 0.0, "id_format_used": 1.0}))
+    write_jsonl(artifacts / "judgments.jsonl", judgments)
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert "replaced_AND_substituted" in cell.metrics
+    # 1.0 + 0.0 + 0.0 = 1.0; mean over 3 outputs = 0.333
+    assert math.isclose(cell.metrics["replaced_AND_substituted"].mean, 1.0 / 3, abs_tol=1e-6)
+
+
+def test_replaced_and_substituted_perfect(tmp_path: Path):
+    """All outputs do both: composite should be 1.0."""
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        _judgment("jr", "o1", "rule_v1", {"username_replaced": 1.0, "id_format_used": 1.0}),
+        _judgment("jg", "o1", "gpt-oss-120b@v1", {"username_replaced": 1.0, "id_format_used": 1.0}),
+    ])
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert math.isclose(cell.metrics["replaced_AND_substituted"].mean, 1.0)
