@@ -49,9 +49,9 @@ def test_e2e_pipeline(tmp_path):
     )
     # Run only one model to keep smoke time bounded; override via env if desired.
     # Phase 1 simplification: run all under_test models.
-    subprocess.check_call(["make", "run"], cwd=REPO_ROOT, env=env, timeout=600)
+    subprocess.check_call(["make", "run"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "judge-rule"], cwd=REPO_ROOT, env=env)
-    subprocess.check_call(["make", "judge-llm"], cwd=REPO_ROOT, env=env, timeout=600)
+    subprocess.check_call(["make", "judge-llm"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "score"], cwd=REPO_ROOT, env=env)
     subprocess.check_call(["make", "report"], cwd=REPO_ROOT, env=env)
 

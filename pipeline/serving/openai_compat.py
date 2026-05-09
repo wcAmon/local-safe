@@ -30,6 +30,10 @@ class OpenAICompatAdapter:
         for k in ("temperature", "max_tokens", "seed", "top_p", "stop"):
             if k in params:
                 kwargs[k] = params[k]
+        # Optional pass-through: extra_body lets configs disable thinking
+        # (e.g. {"chat_template_kwargs": {"enable_thinking": false}} on Qwen3).
+        if "extra_body" in params:
+            kwargs["extra_body"] = params["extra_body"]
 
         t0 = time.perf_counter()
         resp = self._client.chat.completions.create(**kwargs)
@@ -37,8 +41,14 @@ class OpenAICompatAdapter:
 
         choice = resp.choices[0]
         usage = resp.usage
+        # Some llama.cpp builds emit Qwen3 reasoning to a separate
+        # `reasoning_content` field even when enable_thinking is off; if the
+        # standard `content` is empty, fall back to it so we never lose output.
+        content = choice.message.content
+        if not content:
+            content = getattr(choice.message, "reasoning_content", "") or ""
         return ModelResponse(
-            content=choice.message.content or "",
+            content=content,
             latency_ms=elapsed_ms,
             tokens_in=usage.prompt_tokens,
             tokens_out=usage.completion_tokens,
