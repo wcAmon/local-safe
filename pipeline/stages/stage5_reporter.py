@@ -69,7 +69,7 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
             lines.append("")
             col_keys = sorted({(c.prompt_or_scenario_id, c.complexity, c.bucket) for c in kind_cells})
             models = sorted({c.model_id for c in kind_cells})
-            header = "| Model | " + " | ".join(f"{p}/{b}" for (p, _co, b) in col_keys) + " |"
+            header = "| Model | " + " | ".join(f"{p}/{co}/{b}" for (p, co, b) in col_keys) + " |"
             sep = "|" + "|".join(["---"] * (1 + len(col_keys))) + "|"
             lines.append(header); lines.append(sep)
             lookup = {(c.model_id, c.prompt_or_scenario_id, c.complexity, c.bucket): c for c in kind_cells}
@@ -77,7 +77,7 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
                 row = [f"`{m}`"]
                 for p, co, b in col_keys:
                     c = lookup.get((m, p, co, b))
-                    if c is None:
+                    if c is None or sig not in c.metrics:
                         row.append("—")
                     else:
                         cell_str = _format_cell(c, sig)
