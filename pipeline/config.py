@@ -15,6 +15,8 @@ class ModelConfig(BaseModel):
     backend: Backend
     api_model: str | None = None
     base_url_env: str | None = None
+    api_key_env: str | None = None
+    prompt_cache: bool = False
     params: dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
 

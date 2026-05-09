@@ -17,7 +17,9 @@ from pipeline.serving.base import ModelAdapter, Message
 from pipeline.jsonl_io import read_jsonl, append_jsonl_idempotent
 
 
-SCORE_KEYS = ["username_replaced", "id_format_used", "governance_depth", "fingerprint_warning"]
+SCORE_KEYS = ["username_replaced", "id_format_used",
+              "governance_depth", "fingerprint_warning",
+              "multi_step_consistency"]
 
 
 def _judgment_id(output_id: str, judge_id: str, rubric_version: str) -> str:
@@ -112,11 +114,66 @@ def run_llm_judge(
         scores = {}
         for k in SCORE_KEYS:
             entry = parsed.get(k, {"score": 0.0, "evidence": "missing_in_response"})
+            if not isinstance(entry, dict):
+                entry = {"score": float(entry) if isinstance(entry, (int, float)) else 0.0,
+                         "evidence": "flat_format"}
             scores[k] = JudgeScore(score=float(entry.get("score", 0.0)),
                                     evidence=str(entry.get("evidence", "")))
         new.append(Judgment(
             judgment_id=_judgment_id(output_id, judge_cfg.model_id, rubric_version),
             output_id=output_id, judge_id=judge_cfg.model_id, rubric_version=rubric_version,
+            scores=scores, judge_reasoning=resp.content,
+        ))
+
+    # Trace path (Phase 2 multi-turn)
+    from pipeline.schemas import Trace
+    traces = list(read_jsonl(artifacts_dir / "traces.jsonl", Trace))
+    samples_for_traces = {s.sample_id: s for s in read_jsonl(artifacts_dir / "samples_referenced.jsonl", Sample)}
+    for trace in traces:
+        if (trace.trace_id, judge_cfg.model_id, rubric_version) in existing:
+            continue
+        # Compose a "transcript" string from the trace's assistant steps for the judge prompt.
+        transcript_parts = []
+        for s in trace.steps:
+            role = "user" if s.kind == "input" else "assistant"
+            transcript_parts.append(f"[{role}, step {s.step}] {s.content_referenced}")
+        transcript = "\n\n".join(transcript_parts)
+
+        sample_text = ""
+        if trace.sample_id and trace.sample_id in samples_for_traces:
+            sample_text = samples_for_traces[trace.sample_id].content
+
+        user_msg = user_template.format(referenced_input=sample_text or "(no shared sample)",
+                                          redacted_output=transcript)
+        resp = adapter.generate(
+            [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
+            params=judge_cfg.params, request_id=f"judge-{trace.trace_id}",
+        )
+        try:
+            parsed = parse_judge_json(resp.content)
+        except (ValueError, json.JSONDecodeError) as e:
+            new.append(Judgment(
+                judgment_id=_judgment_id(trace.trace_id, judge_cfg.model_id, rubric_version),
+                output_id=trace.trace_id, judge_id=judge_cfg.model_id,
+                rubric_version=rubric_version,
+                scores={k: JudgeScore(score=0.0, evidence="parse_error") for k in SCORE_KEYS},
+                judge_reasoning=resp.content[:500],
+                judge_notes=f"parse_error: {e!s}",
+            ))
+            continue
+
+        scores = {}
+        for k in SCORE_KEYS:
+            entry = parsed.get(k, {"score": 0.0, "evidence": "missing_in_response"})
+            if not isinstance(entry, dict):
+                entry = {"score": float(entry) if isinstance(entry, (int, float)) else 0.0,
+                         "evidence": "flat_format"}
+            scores[k] = JudgeScore(score=float(entry.get("score", 0.0)),
+                                    evidence=str(entry.get("evidence", "")))
+        new.append(Judgment(
+            judgment_id=_judgment_id(trace.trace_id, judge_cfg.model_id, rubric_version),
+            output_id=trace.trace_id, judge_id=judge_cfg.model_id,
+            rubric_version=rubric_version,
             scores=scores, judge_reasoning=resp.content,
         ))
 
