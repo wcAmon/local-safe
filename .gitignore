@@ -1,5 +1,4 @@
 # Vault — never commit raw PII or mapping
-vault/
 *.enc
 
 # Secrets
@@ -20,3 +19,19 @@ reports/
 
 # OS
 .DS_Store
+
+# uv lock — keep, but cache dirs out
+uv.lock.bak
+
+# pytest
+htmlcov/
+.coverage
+.coverage.*
+
+# artifacts: keep .gitkeep but ignore generated files
+artifacts/*
+!artifacts/.gitkeep
+
+# vault: nothing inside ever committed
+vault/*
+!vault/.gitkeep
