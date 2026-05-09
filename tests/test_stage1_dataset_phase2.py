@@ -49,6 +49,52 @@ def test_cross_thread_overrides_with_pii(tmp_path: Path):
     assert raws["rd_a2_singlepost"].bucket == "cross_thread"
 
 
+def test_multi_thread_emits_grouped_samples(tmp_path: Path, tiny_reddit_v2_path: Path):
+    build_samples(
+        reddit_path=tiny_reddit_v2_path,
+        vault_dir=tmp_path / "v", artifacts_dir=tmp_path / "a",
+        salt="t", pii_markers=PII_MARKERS, multi_thread=True,
+    )
+    raws = list(read_jsonl(tmp_path / "v" / "samples_raw.jsonl", Sample))
+    by_id = {s.sample_id: s for s in raws}
+
+    # 5 single_post samples + 2 multi_thread samples (alice_92 has 2 posts, bob_dev has 2 posts; charlie_42 only 1 → no group).
+    assert len(raws) == 7
+    assert "rd_multi_alice_92_multipost" in by_id
+    assert "rd_multi_bob_dev_multipost" in by_id
+
+    grouped = by_id["rd_multi_alice_92_multipost"]
+    assert grouped.complexity == "multi_thread"
+    assert grouped.bucket == "cross_thread"
+    # content contains both posts with [Thread N] markers
+    assert "[Thread 1]" in grouped.content
+    assert "[Thread 2]" in grouped.content
+    assert "alice_92" in grouped.content   # raw form in vault sample
+    assert "新莊" in grouped.content
+
+
+def test_multi_thread_referenced_has_no_raw(tmp_path: Path, tiny_reddit_v2_path: Path):
+    build_samples(
+        reddit_path=tiny_reddit_v2_path,
+        vault_dir=tmp_path / "v", artifacts_dir=tmp_path / "a",
+        salt="t", pii_markers=PII_MARKERS, multi_thread=True,
+    )
+    refs = list(read_jsonl(tmp_path / "a" / "samples_referenced.jsonl", Sample))
+    grouped = next(s for s in refs if s.sample_id == "rd_multi_alice_92_multipost")
+    assert "alice_92" not in grouped.content
+    assert "新莊" not in grouped.content
+
+
+def test_multi_thread_disabled_by_default(tmp_path: Path, tiny_reddit_v2_path: Path):
+    build_samples(
+        reddit_path=tiny_reddit_v2_path,
+        vault_dir=tmp_path / "v", artifacts_dir=tmp_path / "a",
+        salt="t", pii_markers=PII_MARKERS,  # no multi_thread arg
+    )
+    raws = list(read_jsonl(tmp_path / "v" / "samples_raw.jsonl", Sample))
+    assert len(raws) == 5  # only single-post
+
+
 def test_cross_sample_users_populated_for_recurring_author(tmp_path: Path):
     reddit = tmp_path / "reddit.jsonl"
     rows = [

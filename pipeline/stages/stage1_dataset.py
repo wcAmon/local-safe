@@ -62,6 +62,7 @@ def build_samples(
     artifacts_dir: Path,
     salt: str,
     pii_markers: list[str] | None = None,
+    multi_thread: bool = False,
 ) -> SamplesManifest:
     pii_markers = pii_markers if pii_markers is not None else DEFAULT_PII_MARKERS
 
@@ -161,6 +162,93 @@ def build_samples(
                 content=matcher.to_referenced(body),
                 ground_truth=gt,
                 source_meta={"post_id": post_id, "subreddit": row.get("subreddit")},
+            ))
+
+    if multi_thread:
+        # Re-read source to group rows by author.
+        from collections import defaultdict
+        groups: dict[str, list[dict]] = defaultdict(list)
+        with reddit_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                groups[row["author"]].append(row)
+
+        for author, posts in groups.items():
+            if len(posts) < 2:
+                continue
+            # Combine PII entries for the matcher
+            combined_entries: list[tuple[str, PIIKind]] = [(author, PIIKind.USERNAME)]
+            for p in posts:
+                for m in pii_markers:
+                    if m in p.get("body", ""):
+                        combined_entries.append((m, _classify_marker(m)))
+            matcher = PIIMatcher.build(entries=combined_entries, salt=salt)
+
+            # Build content in [Thread N] form
+            chunks: list[str] = []
+            for i, p in enumerate(posts, 1):
+                chunks.append(
+                    f"[Thread {i}] {p['subreddit']}\n"
+                    f"作者: {p['author']}\n"
+                    f"標題: {p['title']}\n"
+                    f"{p.get('body', '')}"
+                )
+            content = "\n\n".join(chunks)
+
+            # Update mapping_rows with any new (raw, token, kind)
+            for raw, kind in combined_entries:
+                tok = matcher.raw_to_token[raw]
+                if raw not in seen_raw_token:
+                    seen_raw_token[raw] = tok
+                    mapping_rows.append(MappingRow(raw=raw, token=tok, kind=kind.value))
+
+            # Ground truth
+            mentions: list[UserMention] = []
+            spans: list[tuple[int, int]] = []
+            idx = 0
+            while True:
+                i = content.find(author, idx)
+                if i < 0:
+                    break
+                spans.append((i, i + len(author)))
+                idx = i + len(author)
+            if spans:
+                mentions.append(UserMention(username=author, spans=spans))
+            fp_markers: list[FingerprintMarker] = []
+            for raw, kind in combined_entries:
+                if raw == author:
+                    continue
+                start = content.find(raw)
+                if start < 0:
+                    continue
+                fp_markers.append(FingerprintMarker(
+                    type={
+                        PIIKind.ORGANIZATION: "organization",
+                        PIIKind.LOCATION: "location",
+                        PIIKind.OCCUPATION: "occupation",
+                        PIIKind.WRITING_STYLE: "writing_style",
+                    }.get(kind, "other"),
+                    text=raw, span=(start, start + len(raw)),
+                ))
+
+            gt = GroundTruth(
+                usernames=[author],
+                user_mentions=mentions,
+                fingerprint_markers=fp_markers,
+                cross_sample_users=[author],
+            )
+            sid = f"rd_multi_{author}_multipost"
+            raw_samples.append(Sample(
+                sample_id=sid, complexity="multi_thread", bucket="cross_thread",
+                content=content, ground_truth=gt,
+                source_meta={"posts": [p["post_id"] for p in posts], "author": author},
+            ))
+            referenced_samples.append(Sample(
+                sample_id=sid, complexity="multi_thread", bucket="cross_thread",
+                content=matcher.to_referenced(content), ground_truth=gt,
+                source_meta={"posts": [p["post_id"] for p in posts]},
             ))
 
     write_jsonl(vault_dir / "samples_raw.jsonl", raw_samples)
