@@ -27,4 +27,14 @@ judges:
       temperature: 0.0
       seed: 42
       max_tokens: 2048
-    notes: "experimental llama.cpp; ctx <=32K, parallel=1"
+      extra_body:
+        reasoning_effort: low
+    notes: "Phase 1 hit harmony parse bug at default effort; reasoning_effort=low works."
+  - model_id: claude-opus-4-7@v1
+    backend: anthropic
+    api_model: "claude-opus-4-7"
+    api_key_env: ANTHROPIC_API_KEY
+    prompt_cache: true
+    params:
+      temperature: 0.0
+      max_tokens: 2048

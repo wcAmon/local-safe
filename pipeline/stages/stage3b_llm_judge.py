@@ -10,11 +10,15 @@ import json
 import hashlib
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 import yaml
 from pipeline.schemas import Output, Sample, Judgment, JudgeScore
 from pipeline.config import ModelConfig
 from pipeline.serving.base import ModelAdapter, Message
 from pipeline.jsonl_io import read_jsonl, append_jsonl_idempotent
+
+if TYPE_CHECKING:
+    from pipeline.serving.budget import BudgetGuard
 
 
 SCORE_KEYS = ["username_replaced", "id_format_used",
@@ -73,6 +77,7 @@ def run_llm_judge(
     rubric_path: Path,
     vault_dir: Path,
     artifacts_dir: Path,
+    budget_guard: "BudgetGuard | None" = None,
 ) -> int:
     rubric = yaml.safe_load(rubric_path.read_text(encoding="utf-8"))
     rubric_version = rubric["version"]
@@ -90,6 +95,8 @@ def run_llm_judge(
     for output_id, output in outputs.items():
         if (output_id, judge_cfg.model_id, rubric_version) in existing:
             continue
+        if budget_guard and not budget_guard.check_before_call(judge_cfg.model_id):
+            break        # stop_and_report; partial judgments still get appended below
         sample = samples[output.sample_id]
         user_msg = user_template.format(
             referenced_input=sample.content,
@@ -99,6 +106,15 @@ def run_llm_judge(
             [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
             params=judge_cfg.params, request_id=f"judge-{output_id}",
         )
+        if budget_guard and resp.cost_usd:
+            budget_guard.record(
+                judge_id=judge_cfg.model_id, cost_usd=resp.cost_usd,
+                output_id=output_id,
+                tokens_in=resp.tokens_in,
+                tokens_out=resp.tokens_out,
+                cache_creation_input_tokens=(resp.raw_meta or {}).get("cache_creation_input_tokens", 0),
+                cache_read_input_tokens=(resp.raw_meta or {}).get("cache_read_input_tokens", 0),
+            )
         try:
             parsed = parse_judge_json(resp.content)
         except (ValueError, json.JSONDecodeError) as e:
@@ -132,6 +148,8 @@ def run_llm_judge(
     for trace in traces:
         if (trace.trace_id, judge_cfg.model_id, rubric_version) in existing:
             continue
+        if budget_guard and not budget_guard.check_before_call(judge_cfg.model_id):
+            break        # stop_and_report; partial judgments still get appended below
         # Compose a "transcript" string from the trace's assistant steps for the judge prompt.
         transcript_parts = []
         for s in trace.steps:
@@ -149,6 +167,15 @@ def run_llm_judge(
             [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
             params=judge_cfg.params, request_id=f"judge-{trace.trace_id}",
         )
+        if budget_guard and resp.cost_usd:
+            budget_guard.record(
+                judge_id=judge_cfg.model_id, cost_usd=resp.cost_usd,
+                output_id=trace.trace_id,
+                tokens_in=resp.tokens_in,
+                tokens_out=resp.tokens_out,
+                cache_creation_input_tokens=(resp.raw_meta or {}).get("cache_creation_input_tokens", 0),
+                cache_read_input_tokens=(resp.raw_meta or {}).get("cache_read_input_tokens", 0),
+            )
         try:
             parsed = parse_judge_json(resp.content)
         except (ValueError, json.JSONDecodeError) as e:

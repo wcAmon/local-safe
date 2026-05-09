@@ -2,19 +2,22 @@ PYTHON := uv run python
 CLI    := $(PYTHON) -m pipeline.cli
 REDDIT ?= tests/fixtures/tiny_reddit.jsonl
 
-.PHONY: help test samples run judge-rule judge-llm score report all clean-artifacts
+.PHONY: help test samples samples-multi run run-multi-turn judge-rule judge-llm judge-llm-all score report all clean-artifacts
 
 help:
 	@echo "Targets:"
-	@echo "  test          Run full test suite"
-	@echo "  samples       Stage 1 (REDDIT=path/to/reddit.jsonl, default fixture)"
-	@echo "  run           Stage 2 — single-shot inference (under_test models)"
-	@echo "  judge-rule    Stage 3a — deterministic rule judge"
-	@echo "  judge-llm     Stage 3b — LLM judge gpt-oss-120b@v1"
-	@echo "  score         Stage 4 — aggregate"
-	@echo "  report        Stage 5 — markdown leaderboard"
-	@echo "  all           samples + run + judge-rule + judge-llm + score + report"
-	@echo "  clean-artifacts  remove artifacts/ and vault/ contents (KEEP .gitkeep)"
+	@echo "  test              Run full test suite"
+	@echo "  samples           Stage 1 (REDDIT=path/to/reddit.jsonl, default fixture)"
+	@echo "  samples-multi     Stage 1 with --multi-thread flag"
+	@echo "  run               Stage 2 — single-shot inference (under_test models)"
+	@echo "  run-multi-turn    Stage 2b — multi-turn scenarios (under_test models)"
+	@echo "  judge-rule        Stage 3a — deterministic rule judge"
+	@echo "  judge-llm         Stage 3b — LLM judge gpt-oss-120b@v1"
+	@echo "  judge-llm-all     Stage 3b — all non-rule judges from models.yaml"
+	@echo "  score             Stage 4 — aggregate"
+	@echo "  report            Stage 5 — markdown leaderboard"
+	@echo "  all               samples-multi + run + run-multi-turn + judge-rule + judge-llm-all + score + report"
+	@echo "  clean-artifacts   remove artifacts/ and vault/ contents (KEEP .gitkeep)"
 
 test:
 	uv run pytest
@@ -22,8 +25,14 @@ test:
 samples:
 	$(CLI) build-samples --reddit $(REDDIT)
 
+samples-multi:
+	$(CLI) build-samples --reddit $(REDDIT) --multi-thread
+
 run:
 	$(CLI) run
+
+run-multi-turn:
+	$(CLI) run-multi-turn
 
 judge-rule:
 	$(CLI) judge-rule
@@ -31,13 +40,16 @@ judge-rule:
 judge-llm:
 	$(CLI) judge-llm --judge gpt-oss-120b@v1
 
+judge-llm-all:
+	$(CLI) judge-llm-all
+
 score:
 	$(CLI) score
 
 report:
 	$(CLI) report
 
-all: samples run judge-rule judge-llm score report
+all: samples-multi run run-multi-turn judge-rule judge-llm-all score report
 
 clean-artifacts:
 	find vault     -mindepth 1 ! -name .gitkeep -delete
