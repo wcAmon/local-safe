@@ -55,6 +55,19 @@ class PIIMatcher:
             out = out.replace(raw, self.raw_to_token[raw])
         return out
 
+    def extract_known_refs(self, text: str) -> set[str]:
+        """Return the set of tokens whose raw strings appear in `text`.
+
+        Used by trace-aware drivers to advance the exposure ledger when a
+        user turn introduces (or re-mentions) a known PII string.
+        Does not match the token strings themselves; only the raws.
+        """
+        out: set[str] = set()
+        for raw in self._sorted_raws():
+            if raw in text:
+                out.add(self.raw_to_token[raw])
+        return out
+
     def redact_output(self, raw_output: str, *, partial: bool = False) -> tuple[str, list[str]]:
         """Return (redacted_text, leaked_tokens).
 

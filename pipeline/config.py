@@ -15,6 +15,8 @@ class ModelConfig(BaseModel):
     backend: Backend
     api_model: str | None = None
     base_url_env: str | None = None
+    api_key_env: str | None = None
+    prompt_cache: bool = False
     params: dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
 
@@ -48,3 +50,9 @@ def resolve_base_url(env_var: str) -> str:
             f"(run via `uv run` or load_dotenv() at entry)"
         )
     return val
+
+
+def load_scenarios(path: Path) -> list["Scenario"]:
+    from pipeline.schemas import Scenario  # late import to avoid cycle if schemas grows
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return [Scenario.model_validate(p) for p in raw]

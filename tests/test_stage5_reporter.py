@@ -9,9 +9,10 @@ def test_report_contains_all_cells_and_metrics(tmp_path: Path):
     artifacts.mkdir()
     cells = [
         CellScore(
-            cell_id="m1@v1|p0|single_post|only_username",
-            model_id="m1@v1", prompt_id="p0", complexity="single_post", bucket="only_username",
-            n_samples=10,
+            cell_id="m1@v1|p0|single_post|only_username|single_shot",
+            model_id="m1@v1", prompt_or_scenario_id="p0",
+            complexity="single_post", bucket="only_username",
+            session_kind="single_shot", n_samples=10,
             metrics={
                 "username_replaced":   CellMetric(mean=0.9, ci95=(0.8, 1.0)),
                 "id_format_used":      CellMetric(mean=0.7, ci95=(0.6, 0.8)),
@@ -20,9 +21,10 @@ def test_report_contains_all_cells_and_metrics(tmp_path: Path):
             },
         ),
         CellScore(
-            cell_id="m2@v1|p0|single_post|only_username",
-            model_id="m2@v1", prompt_id="p0", complexity="single_post", bucket="only_username",
-            n_samples=10,
+            cell_id="m2@v1|p0|single_post|only_username|single_shot",
+            model_id="m2@v1", prompt_or_scenario_id="p0",
+            complexity="single_post", bucket="only_username",
+            session_kind="single_shot", n_samples=10,
             metrics={
                 "username_replaced":   CellMetric(mean=0.5, ci95=(0.4, 0.6)),
                 "id_format_used":      CellMetric(mean=0.4, ci95=(0.3, 0.5)),

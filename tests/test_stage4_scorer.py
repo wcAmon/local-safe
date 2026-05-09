@@ -37,6 +37,7 @@ def test_scorer_one_cell_one_sample(tmp_path: Path):
 
     write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
     write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1", "s1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
     write_jsonl(artifacts / "judgments.jsonl", [
         _judgment("j_rule_o1", "o1", "rule_v1",
                   {"username_replaced": 1.0, "id_format_used": 1.0}),
@@ -51,7 +52,7 @@ def test_scorer_one_cell_one_sample(tmp_path: Path):
     assert len(cells) == 1
     cell = cells[0]
     assert cell.model_id == "m@v1"
-    assert cell.prompt_id == "p0"
+    assert cell.prompt_or_scenario_id == "p0"
     assert cell.bucket == "only_username"
     assert cell.n_samples == 1
     # Hard signal weighted: rule 0.4 + llm 0.6 == 1.0 (both gave 1.0)
@@ -66,6 +67,7 @@ def test_scorer_groups_by_cell(tmp_path: Path):
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
     write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1"), _sample("s2", bucket="with_pii")])
+    write_jsonl(artifacts / "traces.jsonl", [])
     write_jsonl(artifacts / "outputs_redacted.jsonl", [
         _output("o1", "s1", model_id="m@v1", prompt_id="p0"),
         _output("o2", "s2", model_id="m@v1", prompt_id="p0"),
@@ -83,7 +85,7 @@ def test_scorer_groups_by_cell(tmp_path: Path):
     n = run_scorer(artifacts_dir=artifacts)
     # 3 cells: (m@v1, p0, only_username), (m@v1, p0, with_pii), (m@v1, p1, only_username)
     assert n == 3
-    cells = {f"{c.model_id}|{c.prompt_id}|{c.bucket}": c for c in read_jsonl(artifacts / "scores.jsonl", CellScore)}
-    assert "m@v1|p0|only_username" in cells
-    assert "m@v1|p0|with_pii" in cells
-    assert "m@v1|p1|only_username" in cells
+    cells = {f"{c.model_id}|{c.prompt_or_scenario_id}|{c.bucket}|{c.session_kind}": c for c in read_jsonl(artifacts / "scores.jsonl", CellScore)}
+    assert "m@v1|p0|only_username|single_shot" in cells
+    assert "m@v1|p0|with_pii|single_shot" in cells
+    assert "m@v1|p1|only_username|single_shot" in cells

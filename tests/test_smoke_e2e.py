@@ -32,34 +32,29 @@ def test_e2e_pipeline(tmp_path):
     if not _server_up(base_url):
         pytest.skip(f"ollama-hub not reachable at {base_url}")
 
-    # Use temp vault/artifacts/reports to avoid clobbering main run.
     env = os.environ.copy()
     env["LOCAL_SAFE_VAULT_KEY"] = "smoke-test"
-    env["OLLAMA_HUB_BASE_URL"] = base_url   # ensure subprocess sees it even if not in .env
+    env["OLLAMA_HUB_BASE_URL"] = base_url
 
-    # Run all stages via the CLI in-process is awkward (it uses default dirs).
-    # For Phase 1 simplicity we cd into a tmp_path-rooted copy of config and
-    # invoke the make targets, capturing output.
-    # Simpler approach: run the CLI subcommands one-by-one with the default
-    # repo dirs, but first wipe artifacts (idempotency makes this safe).
     subprocess.check_call(["make", "clean-artifacts"], cwd=REPO_ROOT, env=env)
+    # Phase 2: build with --multi-thread
     subprocess.check_call(
-        ["make", "samples", "REDDIT=tests/fixtures/tiny_reddit.jsonl"],
+        ["make", "samples-multi", "REDDIT=tests/fixtures/tiny_reddit_v2.jsonl"],
         cwd=REPO_ROOT, env=env,
     )
-    # Run only one model to keep smoke time bounded; override via env if desired.
-    # Phase 1 simplification: run all under_test models.
     subprocess.check_call(["make", "run"], cwd=REPO_ROOT, env=env, timeout=1800)
+    subprocess.check_call(["make", "run-multi-turn"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "judge-rule"], cwd=REPO_ROOT, env=env)
-    subprocess.check_call(["make", "judge-llm"], cwd=REPO_ROOT, env=env, timeout=1800)
+    subprocess.check_call(["make", "judge-llm-all"], cwd=REPO_ROOT, env=env, timeout=1800)
     subprocess.check_call(["make", "score"], cwd=REPO_ROOT, env=env)
     subprocess.check_call(["make", "report"], cwd=REPO_ROOT, env=env)
 
-    # Sanity-check artifacts exist and aren't empty.
     artifacts = REPO_ROOT / "artifacts"
     assert (REPO_ROOT / "vault" / "samples_raw.jsonl").stat().st_size > 0
-    assert (artifacts / "samples_referenced.jsonl").stat().st_size > 0
+    assert (REPO_ROOT / "vault" / "traces_raw.jsonl").stat().st_size > 0
     assert (artifacts / "outputs_redacted.jsonl").stat().st_size > 0
+    assert (artifacts / "traces.jsonl").stat().st_size > 0
     assert (artifacts / "judgments.jsonl").stat().st_size > 0
     assert (artifacts / "scores.jsonl").stat().st_size > 0
+    assert (artifacts / "cost.jsonl").exists()  # may be empty if no anthropic call
     assert any((REPO_ROOT / "reports").glob("*/leaderboard.md"))
