@@ -164,3 +164,44 @@ def test_visible_pii_refs_so_far_is_cumulative(tmp_path: Path):
     t = list(read_jsonl(artifacts / "traces.jsonl", Trace))[0]
     # step 2 is the second user input. visible_so_far should include alice's token from step 0.
     assert "<<U-deadbe>>" in t.steps[2].visible_pii_refs_so_far
+
+
+def test_multi_turn_driver_skips_non_multi_turn_scenarios(tmp_path: Path):
+    """Phase 3 regression: multi_turn driver must filter session_kind to avoid
+    producing empty 0-step traces for agent_loop scenarios that have no
+    user_script."""
+    vault = tmp_path / "v"; artifacts = tmp_path / "a"
+    vault.mkdir(); artifacts.mkdir()
+    write_jsonl(vault / "mapping.jsonl",
+                [MappingRow(raw="alice_92", token="<<U-deadbe>>", kind="username")])
+    fake = MagicMock()
+    fake.model_id = "m@v1"
+    fake.generate.return_value = ModelResponse(
+        content="ok", latency_ms=1, tokens_in=1, tokens_out=1,
+        finish_reason="stop", cost_usd=0.0, raw_meta={},
+    )
+    multi_turn_scenario = Scenario(
+        scenario_id="mt_test", session_kind="multi_turn", sample_id="rd_s1",
+        user_script=[UserTurn(user_turn=0, template="hi {content}")],
+    )
+    agent_loop_scenario = Scenario(
+        scenario_id="ag_test", session_kind="agent_loop", sample_id="rd_s1",
+        initial_prompt="agent: {content}",
+        tools_used=["tool_x"], max_steps=3,
+        tested_dimensions=["tool_input_clean"],
+    )
+    n = run_multi_turn(
+        adapter=fake, model_cfg=_model_cfg(),
+        scenarios=[multi_turn_scenario, agent_loop_scenario],
+        samples_by_id={"rd_s1": _sample()},
+        vault_dir=vault, artifacts_dir=artifacts, salt="t",
+    )
+    # Only the multi_turn scenario should be processed. Agent_loop is skipped
+    # (its driver handles it separately).
+    assert n == 1
+    traces = list(read_jsonl(artifacts / "traces.jsonl", Trace))
+    assert len(traces) == 1
+    assert traces[0].scenario_id == "mt_test"
+    assert traces[0].session_kind == "multi_turn"
+    # Adapter called exactly once (one user turn → one model call)
+    assert fake.generate.call_count == 1
