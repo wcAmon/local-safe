@@ -35,6 +35,7 @@ def test_e2e_pipeline(tmp_path):
     # Use temp vault/artifacts/reports to avoid clobbering main run.
     env = os.environ.copy()
     env["LOCAL_SAFE_VAULT_KEY"] = "smoke-test"
+    env["OLLAMA_HUB_BASE_URL"] = base_url   # ensure subprocess sees it even if not in .env
 
     # Run all stages via the CLI in-process is awkward (it uses default dirs).
     # For Phase 1 simplicity we cd into a tmp_path-rooted copy of config and
