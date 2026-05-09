@@ -65,6 +65,17 @@ def build_samples(
 ) -> SamplesManifest:
     pii_markers = pii_markers if pii_markers is not None else DEFAULT_PII_MARKERS
 
+    # Phase 2: pre-scan authors so we can mark cross_thread bucket for recurring ones.
+    from collections import Counter
+    author_counts: Counter[str] = Counter()
+    with reddit_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            author_counts[row["author"]] += 1
+    recurring_authors = {a for a, n in author_counts.items() if n >= 2}
+
     raw_samples: list[Sample] = []
     referenced_samples: list[Sample] = []
     mapping_rows: list[MappingRow] = []
@@ -123,13 +134,16 @@ def build_samples(
                 mentions.append(UserMention(username=author, spans=spans))
 
             bucket = classify_bucket(body, pii_markers)
+            if author in recurring_authors:
+                bucket = "cross_thread"
             sample_id = f"rd_{post_id}_singlepost"
 
+            cross_users = [author] if author in recurring_authors else []
             gt = GroundTruth(
                 usernames=[author],
                 user_mentions=mentions,
                 fingerprint_markers=fp_markers,
-                cross_sample_users=[],
+                cross_sample_users=cross_users,
             )
 
             raw_samples.append(Sample(
