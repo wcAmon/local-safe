@@ -50,8 +50,8 @@ judges:
       seed: 42
       max_tokens: 2048
       extra_body:
-        reasoning_effort: low
-    notes: "Phase 1 hit harmony parse bug at default effort; reasoning_effort=low works."
+        reasoning_effort: minimal
+    notes: "Phase 1 hit harmony parse bug at default effort; reasoning_effort=low worked for single-shot but recurred on long agent_loop traces in v0.2.0. minimal further reduces analysis-channel length; stage3b also has graceful api_error fallback."
   - model_id: claude-opus-4-7@v1
     backend: anthropic
     api_model: "claude-opus-4-7"

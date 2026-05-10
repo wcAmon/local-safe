@@ -3,11 +3,19 @@
 The judge model never sees raw PII. It scores four dimensions and we expect
 JSON-only output (per rubric system prompt). Robust parsing handles cases
 where the model wraps JSON in a ```json fence.
+
+Robust to two failure modes that the gpt-oss-120b judge has shown in practice:
+- The model returns a 500 with harmony-format tokens leaking through llama.cpp's
+  parser (`<|channel|>...<|message|>...`). We classify these as `api_error` and
+  emit a placeholder judgment instead of crashing the whole judge run.
+- The model returns valid text but malformed JSON. Pre-existing `parse_error`
+  path handles this.
 """
 
 from __future__ import annotations
 import json
 import hashlib
+import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +27,34 @@ from pipeline.jsonl_io import read_jsonl, append_jsonl_idempotent
 
 if TYPE_CHECKING:
     from pipeline.serving.budget import BudgetGuard
+
+logger = logging.getLogger(__name__)
+
+# String hints that identify a llama.cpp / gpt-oss harmony-format parse failure.
+# When the API raises an exception containing any of these, we record an
+# api_error placeholder judgment and continue, rather than crashing the run.
+_HARMONY_ERROR_HINTS = ("<|channel|>", "<|message|>", "<|constrain|>", "harmony")
+
+
+def _is_harmony_api_error(exc: Exception) -> bool:
+    """True iff the exception message looks like a llama.cpp harmony parse 500."""
+    msg = str(exc)
+    return any(hint in msg for hint in _HARMONY_ERROR_HINTS)
+
+
+def _api_error_judgment(
+    *, target_id: str, judge_id: str, rubric_version: str, exc: Exception,
+) -> Judgment:
+    """Build a placeholder judgment for a harmony-style API failure."""
+    return Judgment(
+        judgment_id=_judgment_id(target_id, judge_id, rubric_version),
+        output_id=target_id,
+        judge_id=judge_id,
+        rubric_version=rubric_version,
+        scores={k: JudgeScore(score=0.0, evidence="api_error") for k in SCORE_KEYS},
+        judge_reasoning="",
+        judge_notes=f"api_error: {str(exc)[:300]}",
+    )
 
 
 SCORE_KEYS_PHASE2 = ["username_replaced", "id_format_used",
@@ -126,10 +162,23 @@ def run_llm_judge(
                 referenced_input=sample.content,
                 redacted_output=output.response,
             )
-        resp = adapter.generate(
-            [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
-            params=judge_cfg.params, request_id=f"judge-{output_id}",
-        )
+        try:
+            resp = adapter.generate(
+                [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
+                params=judge_cfg.params, request_id=f"judge-{output_id}",
+            )
+        except Exception as e:
+            if not _is_harmony_api_error(e):
+                raise
+            logger.warning(
+                "[%s] harmony API error on output %s; emitting api_error placeholder",
+                judge_cfg.model_id, output_id,
+            )
+            new.append(_api_error_judgment(
+                target_id=output_id, judge_id=judge_cfg.model_id,
+                rubric_version=rubric_version, exc=e,
+            ))
+            continue
         if budget_guard and resp.cost_usd:
             budget_guard.record(
                 judge_id=judge_cfg.model_id, cost_usd=resp.cost_usd,
@@ -203,10 +252,23 @@ def run_llm_judge(
                 referenced_input=sample_text or "(no shared sample)",
                 redacted_output=transcript,
             )
-        resp = adapter.generate(
-            [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
-            params=judge_cfg.params, request_id=f"judge-{trace.trace_id}",
-        )
+        try:
+            resp = adapter.generate(
+                [Message(role="system", content=sys_prompt), Message(role="user", content=user_msg)],
+                params=judge_cfg.params, request_id=f"judge-{trace.trace_id}",
+            )
+        except Exception as e:
+            if not _is_harmony_api_error(e):
+                raise
+            logger.warning(
+                "[%s] harmony API error on trace %s; emitting api_error placeholder",
+                judge_cfg.model_id, trace.trace_id,
+            )
+            new.append(_api_error_judgment(
+                target_id=trace.trace_id, judge_id=judge_cfg.model_id,
+                rubric_version=rubric_version, exc=e,
+            ))
+            continue
         if budget_guard and resp.cost_usd:
             budget_guard.record(
                 judge_id=judge_cfg.model_id, cost_usd=resp.cost_usd,
