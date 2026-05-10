@@ -1,5 +1,17 @@
 # local-safe
 
+> **Disclaimer / 免責聲明**
+>
+> This project is a **personal-interest research artifact**. It is not affiliated
+> with, sponsored by, or endorsed by any company, organisation, employer, client,
+> or individual. Findings, code, and design decisions reflect the author's
+> personal exploration of LLM data-governance behaviour and should not be
+> interpreted as representing the views of any entity. Use at your own risk.
+>
+> 本專案為**個人興趣研究**，不代表、不關聯、亦不受任何公司、組織、雇主、客戶
+> 或個人委託、贊助或背書。所有發現、程式碼與設計決策皆為作者個人對 LLM 資料
+> 治理行為的探索，不代表任何實體立場。使用者自負風險。
+
 A benchmark for testing whether LLMs **autonomously** perform data governance —
 PII redaction, identifier substitution, and fingerprint warnings — on raw user
 data, without being explicitly told to.
@@ -136,6 +148,11 @@ benchmark-design feedback loop, not as a published model leaderboard.
 
 ## Disclaimers
 
+- **Personal-interest research.** This project is unaffiliated with any
+  company, organisation, employer, client, or individual. It is not
+  commissioned, sponsored, or endorsed work. The author publishes it solely
+  as a personal exploration of LLM data-governance behaviour and assumes no
+  responsibility for any use, misuse, or downstream consequences.
 - This is research / engineering tooling, not a production privacy filter.
   The pipeline intentionally feeds models unredacted PII to observe their
   reaction; that is the wrong shape for a real privacy proxy.
