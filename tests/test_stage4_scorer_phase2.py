@@ -163,3 +163,55 @@ def test_replaced_and_substituted_perfect(tmp_path: Path):
     run_scorer(artifacts_dir=artifacts)
     cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
     assert math.isclose(cell.metrics["replaced_AND_substituted"].mean, 1.0)
+
+
+def test_privacy_utility_balance_uses_safety_min_times_utility(tmp_path: Path):
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        _judgment("jr", "o1", "rule_v1", {"pii_leak_free": 1.0}),
+        _judgment("jc", "o1", "claude-opus-4-7@v1", {
+            "fingerprint_leak_free": 0.5,
+            "task_utility": 0.8,
+        }),
+    ])
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert math.isclose(cell.metrics["privacy_utility_balance"].mean, 0.4, abs_tol=1e-6)
+
+
+def test_scorer_uses_latest_rubric_per_output_and_judge(tmp_path: Path):
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        _judgment("old", "o1", "claude-opus-4-7@v1", {"task_utility": 0.0}),
+        Judgment(judgment_id="new", output_id="o1", judge_id="claude-opus-4-7@v1",
+                 rubric_version="v3",
+                 scores={"task_utility": JudgeScore(score=1.0, evidence="latest")},
+                 judge_reasoning=""),
+    ])
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert math.isclose(cell.metrics["task_utility"].mean, 1.0, abs_tol=1e-6)
+
+
+def test_scorer_ignores_missing_in_response_scores(tmp_path: Path):
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        Judgment(judgment_id="j", output_id="o1", judge_id="claude-opus-4-7@v1",
+                 rubric_version="v3",
+                 scores={
+                     "task_utility": JudgeScore(score=0.0, evidence="missing_in_response"),
+                 },
+                 judge_reasoning=""),
+    ])
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert "task_utility" not in cell.metrics

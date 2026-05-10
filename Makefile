@@ -14,7 +14,7 @@ help:
 	@echo "  run-agent-loop    Stage 2c — agent_loop scenarios (under_test models)"
 	@echo "  agent             Alias for run-agent-loop"
 	@echo "  judge-rule        Stage 3a — deterministic rule judge"
-	@echo "  judge-llm         Stage 3b — LLM judge gpt-oss-120b@v1"
+	@echo "  judge-llm         Stage 3b — default OpenAI cloud LLM judge"
 	@echo "  judge-llm-all     Stage 3b — all non-rule judges from models.yaml"
 	@echo "  score             Stage 4 — aggregate"
 	@echo "  report            Stage 5 — markdown leaderboard"
@@ -46,7 +46,7 @@ judge-rule:
 	$(CLI) judge-rule
 
 judge-llm:
-	$(CLI) judge-llm --judge gpt-oss-120b@v1
+	$(CLI) judge-llm --judge openai-gpt-4.1-mini@v1
 
 judge-llm-all:
 	$(CLI) judge-llm-all

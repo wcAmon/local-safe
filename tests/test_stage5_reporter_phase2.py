@@ -26,7 +26,7 @@ def test_report_groups_by_session_kind(tmp_path: Path):
     out = render_markdown_report(artifacts_dir=artifacts, reports_dir=tmp_path / "reports", run_id="r1")
     text = out.read_text(encoding="utf-8")
     assert "Single-shot Leaderboard" in text or "single_shot" in text.lower()
-    assert "Multi-turn Leaderboard" in text or "multi_turn" in text.lower()
+    assert "Multi-shot Leaderboard" in text or "multi_shot" in text.lower()
 
 
 def test_unreliable_cells_get_warning_marker(tmp_path: Path):

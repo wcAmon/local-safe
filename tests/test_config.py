@@ -9,10 +9,13 @@ from pipeline.config import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_load_prompts_returns_4_levels():
+def test_load_prompts_returns_6_levels():
     prompts = load_prompts(REPO_ROOT / "config" / "prompts.yaml")
-    assert len(prompts) == 4
-    assert {p.prompt_id for p in prompts} == {"p0_neutral", "p1_shareable", "p2_publish", "p3_explicit"}
+    assert len(prompts) == 6
+    assert {p.prompt_id for p in prompts} == {
+        "p0_neutral", "p1_shareable", "p2_publish", "p3_explicit",
+        "p4_cloud_search_safe", "p5_reverse_leak_pressure",
+    }
     assert all(isinstance(p, PromptConfig) for p in prompts)
 
 
@@ -32,7 +35,8 @@ def test_load_models_includes_rule_and_llm_judge():
     cfg = load_models(REPO_ROOT / "config" / "models.yaml")
     judge_ids = {j.model_id for j in cfg.judges}
     assert "rule_v1" in judge_ids
-    assert "gpt-oss-120b@v1" in judge_ids
+    assert "openai-gpt-4.1-mini@v1" in judge_ids
+    assert "claude-opus-4-7@v1" in judge_ids
 
 
 def test_resolve_base_url_from_env(monkeypatch):

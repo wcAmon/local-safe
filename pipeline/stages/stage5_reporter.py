@@ -9,7 +9,32 @@ from pipeline.schemas import CellScore
 from pipeline.jsonl_io import read_jsonl
 
 
-SIGNALS = ("username_replaced", "id_format_used", "governance_depth", "fingerprint_warning")
+SIGNALS = (
+    "pii_leak_free", "username_replaced", "id_format_used",
+    "governance_depth", "fingerprint_leak_free", "fingerprint_warning",
+    "task_utility", "cloud_search_clean", "reverse_leak_resisted",
+    "third_party_exfiltration_resisted",
+)
+
+TRACK_LABELS = {
+    "single_shot": "single_shot",
+    "multi_turn": "multi_shot",
+    "agent_loop": "agentic_workflow",
+    "long_context": "long_context",
+}
+
+RADAR_AXES = {
+    "direct_privacy": ("pii_leak_free",),
+    "identity_substitution": ("replaced_AND_substituted", "username_replaced"),
+    "fingerprint_safety": ("fingerprint_leak_free", "fingerprint_warning"),
+    "cloud_tool_safety": (
+        "third_party_exfiltration_resisted",
+        "cloud_search_clean",
+        "tool_input_clean",
+    ),
+    "task_utility": ("task_utility", "workflow_completed", "multi_step_consistency"),
+    "reverse_resistance": ("reverse_leak_resisted", "prompt_injection_resisted"),
+}
 
 
 def _format_cell(c: CellScore, sig: str) -> str:
@@ -18,17 +43,64 @@ def _format_cell(c: CellScore, sig: str) -> str:
     return f"{m.mean:.2f} ± {half:.2f}"
 
 
+def _mean_for_axis(cells: list[CellScore], signals: tuple[str, ...]) -> float | None:
+    values: list[tuple[float, int]] = []
+    for c in cells:
+        for sig in signals:
+            if sig in c.metrics:
+                values.append((c.metrics[sig].mean, c.n_samples))
+                break
+    if not values:
+        return None
+    total_n = sum(n for _, n in values)
+    return sum(v * n for v, n in values) / total_n
+
+
+def _write_radar_data(out_dir: Path, cells: list[CellScore]) -> None:
+    by_track_model: dict[tuple[str, str], list[CellScore]] = defaultdict(list)
+    for c in cells:
+        by_track_model[(TRACK_LABELS.get(c.session_kind, c.session_kind), c.model_id)].append(c)
+
+    rows = []
+    for (track, model_id), model_cells in sorted(by_track_model.items()):
+        axes = {}
+        for axis, signals in RADAR_AXES.items():
+            value = _mean_for_axis(model_cells, signals)
+            if value is not None:
+                axes[axis] = round(value, 4)
+        rows.append({
+            "track": track,
+            "model_id": model_id,
+            "axes": axes,
+        })
+
+    payload = {
+        "schema": "datatrace-radar-v1",
+        "axes": list(RADAR_AXES.keys()),
+        "tracks": sorted({r["track"] for r in rows}),
+        "models": sorted({r["model_id"] for r in rows}),
+        "rows": rows,
+    }
+    (out_dir / "radar_data.json").write_text(
+        _json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: str) -> Path:
     cells = list(read_jsonl(artifacts_dir / "scores.jsonl", CellScore))
     out_dir = reports_dir / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "leaderboard.md"
+    _write_radar_data(out_dir, cells)
 
     lines: list[str] = []
-    lines.append(f"# PII Governance Benchmark — `{run_id}`")
+    lines.append(f"# DataTrace Privacy Benchmark — `{run_id}`")
     lines.append("")
     lines.append(f"Generated: {dt.datetime.now(dt.timezone.utc).isoformat()}")
     lines.append(f"Cells: {len(cells)}")
+    lines.append("Tracks: `single_shot`, `multi_shot`, `agentic_workflow`")
+    lines.append(f"Radar data: `radar_data.json`")
     lines.append("")
 
     # Group cells by session_kind
@@ -39,13 +111,21 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
     # Top performers (per signal, across all cells)
     by_signal: dict[str, list[CellScore]] = defaultdict(list)
     for c in cells:
-        for sig in tuple(SIGNALS) + ("multi_step_consistency", "id_consistency", "replaced_AND_substituted"):
+        for sig in tuple(SIGNALS) + (
+            "multi_step_consistency", "id_consistency",
+            "workflow_completed", "replaced_AND_substituted",
+            "privacy_utility_balance",
+        ):
             if sig in c.metrics:
                 by_signal[sig].append(c)
 
     lines.append("## Top performers")
     lines.append("")
-    for sig in list(SIGNALS) + ["multi_step_consistency", "id_consistency", "replaced_AND_substituted"]:
+    for sig in list(SIGNALS) + [
+        "multi_step_consistency", "id_consistency",
+        "workflow_completed", "replaced_AND_substituted",
+        "privacy_utility_balance",
+    ]:
         if not by_signal[sig]:
             continue
         top = max(by_signal[sig], key=lambda c: c.metrics[sig].mean)
@@ -57,12 +137,22 @@ def render_markdown_report(*, artifacts_dir: Path, reports_dir: Path, run_id: st
     for kind in ("single_shot", "multi_turn", "agent_loop", "long_context"):
         if kind not in cells_by_kind:
             continue
-        kind_label = {"single_shot": "Single-shot", "multi_turn": "Multi-turn",
-                       "agent_loop": "Agent-loop", "long_context": "Long-context"}[kind]
+        kind_label = {
+            "single_shot": "Single-shot",
+            "multi_turn": "Multi-shot",
+            "agent_loop": "Agentic workflow",
+            "long_context": "Long-context",
+        }[kind]
         lines.append(f"# {kind_label} Leaderboard")
         lines.append("")
         kind_cells = cells_by_kind[kind]
-        kind_signals = [sig for sig in (list(SIGNALS) + ["multi_step_consistency", "id_consistency", "replaced_AND_substituted"])
+        kind_signals = [sig for sig in (
+            list(SIGNALS) + [
+                "multi_step_consistency", "id_consistency",
+                "workflow_completed", "replaced_AND_substituted",
+                "privacy_utility_balance",
+            ]
+        )
                           if any(sig in c.metrics for c in kind_cells)]
         for sig in kind_signals:
             lines.append(f"## `{sig}`")

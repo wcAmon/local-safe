@@ -7,7 +7,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field
 
-Backend = Literal["openai_compat", "anthropic", "rule"]
+Backend = Literal["openai_compat", "openai", "anthropic", "rule"]
 
 
 class ModelConfig(BaseModel):

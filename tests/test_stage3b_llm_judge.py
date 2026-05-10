@@ -67,7 +67,8 @@ def test_run_llm_judge_writes_judgment(tmp_path: Path):
     )
     judge_cfg = ModelConfig(model_id="gpt-oss-120b@v1", backend="openai_compat",
                              api_model="gpt-oss-120b", base_url_env="X",
-                             params={"temperature": 0.0, "seed": 42, "max_tokens": 2048})
+                             params={"temperature": 0.0, "seed": 42, "max_tokens": 2048,
+                                     "judge_attempts": 1})
 
     n = run_llm_judge(
         adapter=fake_adapter, judge_cfg=judge_cfg,
@@ -145,7 +146,8 @@ def test_run_llm_judge_skips_harmony_api_error(tmp_path: Path):
     ]
     judge_cfg = ModelConfig(model_id="gpt-oss-120b@v1", backend="openai_compat",
                              api_model="gpt-oss-120b", base_url_env="X",
-                             params={"temperature": 0.0, "seed": 42, "max_tokens": 2048})
+                             params={"temperature": 0.0, "seed": 42, "max_tokens": 2048,
+                                     "judge_attempts": 1})
 
     n = run_llm_judge(
         adapter=fake_adapter, judge_cfg=judge_cfg,
@@ -164,9 +166,8 @@ def test_run_llm_judge_skips_harmony_api_error(tmp_path: Path):
     assert by_oid["o2"].scores["username_replaced"].score == 1.0
 
 
-def test_run_llm_judge_propagates_non_harmony_500(tmp_path: Path):
-    """Non-harmony 500s should NOT be silently swallowed — they're real bugs."""
-    import pytest
+def test_run_llm_judge_records_non_harmony_api_error(tmp_path: Path):
+    """Cloud judge failures should not abort the batch; they emit placeholders."""
     vault = tmp_path / "vault"; artifacts = tmp_path / "artifacts"
     vault.mkdir(); artifacts.mkdir()
     write_jsonl(vault / "outputs_raw.jsonl", [_output("o1", "s1")])
@@ -181,9 +182,12 @@ def test_run_llm_judge_propagates_non_harmony_500(tmp_path: Path):
                              api_model="gpt-oss-120b", base_url_env="X",
                              params={"seed": 42})
 
-    with pytest.raises(RuntimeError, match="Out of memory"):
-        run_llm_judge(
-            adapter=fake_adapter, judge_cfg=judge_cfg,
-            rubric_path=Path(__file__).resolve().parents[1] / "config" / "rubric.v1.yaml",
-            vault_dir=vault, artifacts_dir=artifacts,
-        )
+    n = run_llm_judge(
+        adapter=fake_adapter, judge_cfg=judge_cfg,
+        rubric_path=Path(__file__).resolve().parents[1] / "config" / "rubric.v1.yaml",
+        vault_dir=vault, artifacts_dir=artifacts,
+    )
+    assert n == 1
+    j = list(read_jsonl(artifacts / "judgments.jsonl", Judgment))[0]
+    assert j.scores["username_replaced"].evidence == "api_error"
+    assert "Out of memory" in j.judge_notes

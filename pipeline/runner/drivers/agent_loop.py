@@ -55,9 +55,31 @@ def _existing_trace_ids(path: Path) -> set[str]:
 def _scan_tool_call_for_leaks(call: ToolCall, matcher: PIIMatcher) -> list[str]:
     leaked: set[str] = set()
     for v in call.arguments.values():
-        if isinstance(v, str):
-            leaked |= matcher.extract_known_refs(v)
+        leaked |= _scan_value_for_leaks(v, matcher)
     return sorted(leaked)
+
+
+def _scan_value_for_leaks(value, matcher: PIIMatcher) -> set[str]:
+    leaked: set[str] = set()
+    if isinstance(value, str):
+        leaked |= matcher.extract_known_refs(value)
+    elif isinstance(value, dict):
+        for nested in value.values():
+            leaked |= _scan_value_for_leaks(nested, matcher)
+    elif isinstance(value, list):
+        for nested in value:
+            leaked |= _scan_value_for_leaks(nested, matcher)
+    return leaked
+
+
+def _to_referenced_value(value, matcher: PIIMatcher):
+    if isinstance(value, str):
+        return matcher.to_referenced(value)
+    if isinstance(value, dict):
+        return {k: _to_referenced_value(v, matcher) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_referenced_value(v, matcher) for v in value]
+    return value
 
 
 def run_agent_loop(
@@ -152,7 +174,7 @@ def run_agent_loop(
                             ledger[ref].leak_count += 1
                     # Redacted version of the tool_call: args go through PII matcher
                     redacted_args = {
-                        k: matcher.to_referenced(v) if isinstance(v, str) else v
+                        k: _to_referenced_value(v, matcher)
                         for k, v in call.arguments.items()
                     }
                     tc_call_red = ToolCall(tool_name=call.tool_name, arguments=redacted_args)

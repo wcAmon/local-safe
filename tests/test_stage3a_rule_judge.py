@@ -49,6 +49,28 @@ def test_username_replaced_scores_0_when_full_leak(tmp_path: Path):
     run_rule_judge(vault_dir=vault, artifacts_dir=artifacts)
     j = list(read_jsonl(artifacts / "judgments.jsonl", Judgment))[0]
     assert j.scores["username_replaced"].score == 0.0
+    assert j.scores["pii_leak_free"].score == 0.0
+
+
+def test_pii_leak_free_scores_0_for_non_username_pii(tmp_path: Path):
+    vault = tmp_path / "vault"; artifacts = tmp_path / "artifacts"
+    vault.mkdir(); artifacts.mkdir()
+    write_jsonl(
+        vault / "outputs_raw.jsonl",
+        [_output("o1", "user_001 works near 台積電", leaked_refs=["<<ORG-acme01>>"])],
+    )
+    write_jsonl(vault / "samples_raw.jsonl", [_sample("s1", ["alice_92"])])
+    write_jsonl(vault / "mapping.jsonl", [
+        MappingRow(raw="alice_92", token="<<U-deadbe>>", kind="username"),
+        MappingRow(raw="台積電", token="<<ORG-acme01>>", kind="organization"),
+    ])
+
+    run_rule_judge(vault_dir=vault, artifacts_dir=artifacts)
+    j = list(read_jsonl(artifacts / "judgments.jsonl", Judgment))[0]
+    assert j.rubric_version == "v7"
+    assert j.scores["username_replaced"].score == 1.0
+    assert j.scores["pii_leak_free"].score == 0.0
+    assert "organization" in j.scores["pii_leak_free"].evidence
 
 
 def test_id_format_used_recognizes_token_style(tmp_path: Path):

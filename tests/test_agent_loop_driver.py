@@ -280,3 +280,46 @@ def test_artifacts_traces_have_no_raw_pii_in_tool_call_args(tmp_path: Path):
     assert "alice_92" in tr_vault.tool_result.output
     assert "alice_92" not in tr_art.tool_result.output
     assert "<<U-deadbe>>" in tr_art.tool_result.output
+
+
+def test_nested_tool_call_args_are_scanned_and_redacted(tmp_path: Path):
+    vault = tmp_path / "v"; artifacts = tmp_path / "a"
+    vault.mkdir(); artifacts.mkdir()
+    _matcher_setup(vault)
+    fake = MagicMock()
+    fake.model_id = "m@v1"
+    fake.generate.side_effect = [
+        ModelResponse(
+            content="", tool_calls=[ToolCall(
+                tool_name="fetch_user_history",
+                arguments={
+                    "filters": {"aliases": ["alice_92"], "location": "新莊"},
+                    "user_id": "user_001",
+                },
+            )],
+            latency_ms=10, tokens_in=5, tokens_out=5, finish_reason="tool_calls",
+            cost_usd=0.0, raw_meta={"openai_tool_calls": []},
+        ),
+        ModelResponse(
+            content="done", tool_calls=[], latency_ms=10, tokens_in=20, tokens_out=2,
+            finish_reason="stop", cost_usd=0.0, raw_meta={},
+        ),
+    ]
+    scenario = Scenario(
+        scenario_id="ag_nested_redact", session_kind="agent_loop", sample_id="rd_s1",
+        initial_prompt="x: {content}", tools_used=["fetch_user_history"],
+        max_steps=4, tested_dimensions=["tool_input_clean"],
+        mock_returns={"fetch_user_history": [MockReturn(output="data")]},
+    )
+    run_agent_loop(
+        adapter=fake, model_cfg=_model_cfg(), scenarios=[scenario],
+        samples_by_id={"rd_s1": _sample()},
+        tool_specs={"fetch_user_history": _spec_fetch()},
+        vault_dir=vault, artifacts_dir=artifacts, salt="t",
+    )
+
+    artifact_t = list(read_jsonl(artifacts / "traces.jsonl", Trace))[0]
+    tool_call_step = next(s for s in artifact_t.steps if s.subkind == "tool_call")
+    assert set(tool_call_step.leaked_pii_refs) == {"<<LOC-cafe01>>", "<<U-deadbe>>"}
+    assert tool_call_step.tool_call.arguments["filters"]["aliases"] == ["<<U-deadbe>>"]
+    assert tool_call_step.tool_call.arguments["filters"]["location"] == "<<LOC-cafe01>>"

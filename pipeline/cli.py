@@ -43,6 +43,18 @@ def _adapter_for(model_cfg):
         base_url = resolve_base_url(model_cfg.base_url_env)
         return OpenAICompatAdapter(
             model_id=model_cfg.model_id, api_model=model_cfg.api_model, base_url=base_url,
+            timeout=model_cfg.params.get("timeout"),
+            max_retries=model_cfg.params.get("max_retries"),
+        )
+    if model_cfg.backend == "openai":
+        api_key = os.environ.get(model_cfg.api_key_env or "OPENAI_API_KEY")
+        if not api_key:
+            sys.exit(f"missing env var {model_cfg.api_key_env!r}")
+        return OpenAICompatAdapter(
+            model_id=model_cfg.model_id, api_model=model_cfg.api_model,
+            api_key=api_key,
+            timeout=model_cfg.params.get("timeout"),
+            max_retries=model_cfg.params.get("max_retries"),
         )
     if model_cfg.backend == "anthropic":
         api_key = os.environ.get(model_cfg.api_key_env or "ANTHROPIC_API_KEY")
@@ -52,6 +64,8 @@ def _adapter_for(model_cfg):
         return AnthropicAdapter(
             model_id=model_cfg.model_id, api_model=model_cfg.api_model,
             api_key=api_key, prompt_cache=model_cfg.prompt_cache,
+            timeout=model_cfg.params.get("timeout"),
+            max_retries=model_cfg.params.get("max_retries"),
         )
     raise NotImplementedError(f"backend {model_cfg.backend!r} not supported")
 
@@ -69,6 +83,14 @@ def cmd_build_samples(args: argparse.Namespace) -> None:
 def cmd_run(args: argparse.Namespace) -> None:
     models_cfg = load_models(DEFAULT_CONFIG / "models.yaml")
     prompts = load_prompts(DEFAULT_CONFIG / "prompts.yaml")
+    if getattr(args, "model", None):
+        models_cfg.under_test = [m for m in models_cfg.under_test if m.model_id == args.model]
+        if not models_cfg.under_test:
+            sys.exit(f"unknown under_test model_id: {args.model!r}")
+    if getattr(args, "prompt", None):
+        prompts = [p for p in prompts if p.prompt_id == args.prompt]
+        if not prompts:
+            sys.exit(f"unknown prompt_id: {args.prompt!r}")
     samples = list(read_jsonl(DEFAULT_VAULT / "samples_raw.jsonl", Sample))
     salt = os.environ.get("LOCAL_SAFE_VAULT_KEY", "phase1-default-salt")
     total_added = 0
@@ -95,10 +117,14 @@ def cmd_judge_llm(args: argparse.Namespace) -> None:
     if judge_cfg is None:
         sys.exit(f"unknown judge model_id: {args.judge!r}")
     adapter = _adapter_for(judge_cfg)
+    rubric_path = DEFAULT_CONFIG / "rubric.v2.yaml"
+    if not rubric_path.exists():
+        rubric_path = DEFAULT_CONFIG / "rubric.v1.yaml"
     n = run_llm_judge(
         adapter=adapter, judge_cfg=judge_cfg,
-        rubric_path=DEFAULT_CONFIG / "rubric.v1.yaml",
+        rubric_path=rubric_path,
         vault_dir=DEFAULT_VAULT, artifacts_dir=DEFAULT_ARTIFACTS,
+        limit=args.limit,
     )
     print(f"[{judge_cfg.model_id}] added {n} judgments")
 
@@ -109,6 +135,14 @@ def cmd_run_multi_turn(args: argparse.Namespace) -> None:
     from pipeline.runner.drivers.multi_turn import run_multi_turn
     models_cfg = load_models(DEFAULT_CONFIG / "models.yaml")
     scenarios = load_scenarios(DEFAULT_CONFIG / "scenarios.yaml")
+    if getattr(args, "model", None):
+        models_cfg.under_test = [m for m in models_cfg.under_test if m.model_id == args.model]
+        if not models_cfg.under_test:
+            sys.exit(f"unknown under_test model_id: {args.model!r}")
+    if getattr(args, "scenario", None):
+        scenarios = [s for s in scenarios if s.scenario_id == args.scenario]
+        if not scenarios:
+            sys.exit(f"unknown scenario_id: {args.scenario!r}")
     samples = {s.sample_id: s for s in read_jsonl(DEFAULT_VAULT / "samples_raw.jsonl", Sample)}
     salt = os.environ.get("LOCAL_SAFE_VAULT_KEY", "phase1-default-salt")
     total = 0
@@ -128,6 +162,14 @@ def cmd_run_agent_loop(args):
     from pipeline.runner.drivers.agent_loop import run_agent_loop
     models_cfg = load_models(DEFAULT_CONFIG / "models.yaml")
     scenarios = load_scenarios(DEFAULT_CONFIG / "scenarios.yaml")
+    if getattr(args, "model", None):
+        models_cfg.under_test = [m for m in models_cfg.under_test if m.model_id == args.model]
+        if not models_cfg.under_test:
+            sys.exit(f"unknown under_test model_id: {args.model!r}")
+    if getattr(args, "scenario", None):
+        scenarios = [s for s in scenarios if s.scenario_id == args.scenario]
+        if not scenarios:
+            sys.exit(f"unknown scenario_id: {args.scenario!r}")
     tools = {t.name: t for t in load_tools(DEFAULT_CONFIG / "tools.yaml")}
     samples = {s.sample_id: s for s in read_jsonl(DEFAULT_VAULT / "samples_raw.jsonl", Sample)}
     salt = os.environ.get("LOCAL_SAFE_VAULT_KEY", "phase1-default-salt")
@@ -167,12 +209,14 @@ def cmd_judge_llm_all(args: argparse.Namespace) -> None:
         n = run_llm_judge(adapter=adapter, judge_cfg=judge_cfg,
                            rubric_path=rubric_path,
                            vault_dir=DEFAULT_VAULT, artifacts_dir=DEFAULT_ARTIFACTS,
-                           budget_guard=guard)
+                           budget_guard=guard, limit=args.limit)
         print(f"[{judge_cfg.model_id}] added {n} judgments")
 
 
 def cmd_score(_: argparse.Namespace) -> None:
-    n = run_scorer(artifacts_dir=DEFAULT_ARTIFACTS)
+    models_cfg = load_models(DEFAULT_CONFIG / "models.yaml")
+    active_judges = {j.model_id for j in models_cfg.judges if j.backend != "rule"}
+    n = run_scorer(artifacts_dir=DEFAULT_ARTIFACTS, active_judge_ids=active_judges)
     print(f"Wrote {n} cell scores")
 
 
@@ -196,12 +240,18 @@ def main(argv: list[str] | None = None) -> None:
     p_bs.set_defaults(func=cmd_build_samples)
 
     p_run = sub.add_parser("run", help="Stage 2: run single-shot inference")
+    p_run.add_argument("--model", default=None, help="optional under_test model_id filter")
+    p_run.add_argument("--prompt", default=None, help="optional prompt_id filter")
     p_run.set_defaults(func=cmd_run)
 
     p_rmt = sub.add_parser("run-multi-turn", help="Stage 2b: run multi-turn scenarios")
+    p_rmt.add_argument("--model", default=None, help="optional under_test model_id filter")
+    p_rmt.add_argument("--scenario", default=None, help="optional scenario_id filter")
     p_rmt.set_defaults(func=cmd_run_multi_turn)
 
     p_rag = sub.add_parser("run-agent-loop", help="Stage 2c: run agent_loop scenarios")
+    p_rag.add_argument("--model", default=None, help="optional under_test model_id filter")
+    p_rag.add_argument("--scenario", default=None, help="optional scenario_id filter")
     p_rag.set_defaults(func=cmd_run_agent_loop)
 
     p_jr = sub.add_parser("judge-rule", help="Stage 3a: rule-based judging")
@@ -209,9 +259,11 @@ def main(argv: list[str] | None = None) -> None:
 
     p_jl = sub.add_parser("judge-llm", help="Stage 3b: LLM judge")
     p_jl.add_argument("--judge", required=True, help="judge model_id from models.yaml")
+    p_jl.add_argument("--limit", type=int, default=None, help="max new judgments to add this run")
     p_jl.set_defaults(func=cmd_judge_llm)
 
     p_jla = sub.add_parser("judge-llm-all", help="Stage 3b: run all non-rule judges")
+    p_jla.add_argument("--limit", type=int, default=None, help="max new judgments per judge")
     p_jla.set_defaults(func=cmd_judge_llm_all)
 
     p_sc = sub.add_parser("score", help="Stage 4: aggregate scores")

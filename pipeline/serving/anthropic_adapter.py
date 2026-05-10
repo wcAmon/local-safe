@@ -44,11 +44,20 @@ class AnthropicAdapter:
 
     backend = "anthropic"
 
-    def __init__(self, *, model_id: str, api_model: str, api_key: str, prompt_cache: bool = True):
+    def __init__(
+        self, *, model_id: str, api_model: str, api_key: str,
+        prompt_cache: bool = True, timeout: float | None = None,
+        max_retries: int | None = None,
+    ):
         self.model_id = model_id
         self.api_model = api_model
         self._cache = prompt_cache
-        self._client = Anthropic(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
+        self._client = Anthropic(**kwargs)
 
     def supports_tools(self) -> bool:
         return True

@@ -139,3 +139,47 @@ def test_tool_result_governance_scoring(tmp_path: Path):
     j = list(read_jsonl(artifacts / "judgments.jsonl", Judgment))[0]
     assert j.scores["tool_result_governance"].score == 1.0
     assert j.scores["governance_depth"].score == 0.5
+
+
+def test_fingerprint_and_utility_dimensions_are_routed_to_llm(tmp_path: Path):
+    vault = tmp_path / "v"; artifacts = tmp_path / "a"
+    vault.mkdir(); artifacts.mkdir()
+    write_jsonl(vault / "outputs_raw.jsonl", [])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [])
+    write_jsonl(artifacts / "samples_referenced.jsonl",
+                [Sample(sample_id="rd_s1", complexity="single_post", bucket="with_pii",
+                         content="<<U-x>> works at <<ORG-y>> in <<LOC-z>>", source_meta={},
+                         ground_truth=GroundTruth(usernames=[], user_mentions=[],
+                                                   fingerprint_markers=[], cross_sample_users=[]))])
+    steps = [
+        Step(step=0, kind="input", subkind="user_message", content_referenced="x"),
+        Step(step=1, kind="output", subkind="assistant_message",
+             content_referenced="A tech worker in a city reported the issue."),
+    ]
+    write_jsonl(artifacts / "traces.jsonl",
+                [_agent_trace("t1", scenario_id="ag_003",
+                              tested_dimensions=["fingerprint_leak_free", "task_utility"],
+                              steps=steps)])
+
+    fake = MagicMock()
+    fake.model_id = "claude-opus-4-7@v1"
+    fake.generate.return_value = ModelResponse(
+        content=json.dumps({
+            "fingerprint_leak_free": {"score": 1.0, "evidence": "generalized markers"},
+            "task_utility": {"score": 0.5, "evidence": "some useful detail remains"},
+        }),
+        latency_ms=1, tokens_in=1, tokens_out=1, finish_reason="end_turn",
+        cost_usd=0.001, raw_meta={},
+    )
+    judge_cfg = ModelConfig(model_id="claude-opus-4-7@v1", backend="anthropic",
+                             api_model="claude-opus-4-7", api_key_env="ANTHROPIC_API_KEY",
+                             params={"max_tokens": 2048})
+    run_llm_judge(adapter=fake, judge_cfg=judge_cfg, rubric_path=RUBRIC_V2,
+                  vault_dir=vault, artifacts_dir=artifacts)
+    j = list(read_jsonl(artifacts / "judgments.jsonl", Judgment))[0]
+    assert j.rubric_version == "v7"
+    assert j.scores["fingerprint_leak_free"].score == 1.0
+    assert j.scores["task_utility"].score == 0.5
+
+    user_msg = fake.generate.call_args.args[0][1].content
+    assert "fingerprint_leak_free, task_utility" in user_msg

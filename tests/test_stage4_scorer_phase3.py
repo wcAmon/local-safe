@@ -68,3 +68,24 @@ def test_cell_carries_tested_dimensions(tmp_path: Path):
     run_scorer(artifacts_dir=artifacts)
     cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
     assert cell.tested_dimensions == ["tool_args_minimal", "tool_input_clean"]
+
+
+def test_unscored_phase3_signal_is_absent_not_zero(tmp_path: Path):
+    artifacts = tmp_path / "a"; artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("rd_s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [])
+    write_jsonl(artifacts / "traces.jsonl", [
+        Trace(trace_id="t1", session_kind="agent_loop", model_id="m@v1",
+              scenario_id="ag_001", sample_id="rd_s1",
+              tested_dimensions=["username_replaced"],
+              steps=[Step(step=0, kind="input", subkind="user_message", content_referenced="x"),
+                     Step(step=1, kind="output", subkind="assistant_message", content_referenced="y")],
+              metadata=_meta())
+    ])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        _judgment("jr", "t1", "rule_v1", {"username_replaced": 1.0}),
+    ])
+    run_scorer(artifacts_dir=artifacts)
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert "username_replaced" in cell.metrics
+    assert "tool_input_clean" not in cell.metrics

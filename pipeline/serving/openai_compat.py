@@ -1,4 +1,7 @@
-"""OpenAI-compatible adapter (works with ollama-hub gateway)."""
+"""OpenAI / OpenAI-compatible adapter.
+
+Works with both the local ollama-hub gateway and the hosted OpenAI API.
+"""
 
 from __future__ import annotations
 import json
@@ -8,13 +11,40 @@ from pipeline.schemas import ToolCall, ToolSpec
 from .base import Message, ModelResponse
 
 
+PRICING: dict[str, dict[str, float]] = {
+    # USD per token. Keep this conservative and update alongside model config.
+    "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
+}
+
+
+def _estimate_cost(api_model: str, usage) -> float:
+    rate = PRICING.get(api_model)
+    if rate is None or usage is None:
+        return 0.0
+    return (
+        getattr(usage, "prompt_tokens", 0) * rate["input"]
+        + getattr(usage, "completion_tokens", 0) * rate["output"]
+    )
+
+
 class OpenAICompatAdapter:
     """Wrap openai SDK against any OpenAI-compatible endpoint."""
 
-    def __init__(self, *, model_id: str, api_model: str, base_url: str, api_key: str = "unused"):
+    def __init__(
+        self, *, model_id: str, api_model: str, base_url: str | None = None,
+        api_key: str = "unused", timeout: float | None = None,
+        max_retries: int | None = None,
+    ):
         self.model_id = model_id
         self.api_model = api_model
-        self._client = OpenAI(base_url=base_url, api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if base_url is not None:
+            kwargs["base_url"] = base_url
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
+        self._client = OpenAI(**kwargs)
 
     def supports_tools(self) -> bool:
         return True   # openai_compat backends advertise tool support
@@ -40,6 +70,8 @@ class OpenAICompatAdapter:
                 kwargs[k] = params[k]
         if "extra_body" in params:
             kwargs["extra_body"] = params["extra_body"]
+        if "response_format" in params:
+            kwargs["response_format"] = params["response_format"]
         if tools:
             kwargs["tools"] = [{
                 "type": "function",
@@ -75,7 +107,7 @@ class OpenAICompatAdapter:
             tokens_in=usage.prompt_tokens,
             tokens_out=usage.completion_tokens,
             finish_reason=choice.finish_reason or "stop",
-            cost_usd=0.0,
+            cost_usd=_estimate_cost(self.api_model, usage),
             raw_meta={"id": getattr(resp, "id", None), "request_id": request_id,
                       "openai_tool_calls": [
                           {"id": getattr(tc, "id", None),

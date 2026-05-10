@@ -41,21 +41,24 @@ under_test:
 judges:
   - model_id: rule_v1
     backend: rule
-  - model_id: gpt-oss-120b@v1
-    backend: openai_compat
-    api_model: "gpt-oss-120b"
-    base_url_env: OLLAMA_HUB_BASE_URL
+  - model_id: openai-gpt-4.1-mini@v1
+    backend: openai
+    api_model: "gpt-4.1-mini"
+    api_key_env: OPENAI_API_KEY
     params:
       temperature: 0.0
-      seed: 42
-      max_tokens: 2048
-      extra_body:
-        reasoning_effort: minimal
-    notes: "Phase 1 hit harmony parse bug at default effort; reasoning_effort=low worked for single-shot but recurred on long agent_loop traces in v0.2.0. minimal further reduces analysis-channel length; stage3b also has graceful api_error fallback."
+      max_tokens: 1024
+      timeout: 45
+      max_retries: 2
+      response_format:
+        type: json_object
+    notes: "Cloud OpenAI judge. JSON mode + timeout keeps judge batches bounded and avoids local gpt-oss harmony parser failures."
   - model_id: claude-opus-4-7@v1
     backend: anthropic
     api_model: "claude-opus-4-7"
     api_key_env: ANTHROPIC_API_KEY
     prompt_cache: true
     params:
-      max_tokens: 2048
+      max_tokens: 1024
+      timeout: 60
+      max_retries: 2

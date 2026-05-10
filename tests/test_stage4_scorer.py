@@ -40,7 +40,7 @@ def test_scorer_one_cell_one_sample(tmp_path: Path):
     write_jsonl(artifacts / "traces.jsonl", [])
     write_jsonl(artifacts / "judgments.jsonl", [
         _judgment("j_rule_o1", "o1", "rule_v1",
-                  {"username_replaced": 1.0, "id_format_used": 1.0}),
+                  {"pii_leak_free": 1.0, "username_replaced": 1.0, "id_format_used": 1.0}),
         _judgment("j_llm_o1", "o1", "gpt-oss-120b@v1",
                   {"username_replaced": 1.0, "id_format_used": 1.0,
                    "governance_depth": 0.6, "fingerprint_warning": 0.0}),
@@ -56,6 +56,7 @@ def test_scorer_one_cell_one_sample(tmp_path: Path):
     assert cell.bucket == "only_username"
     assert cell.n_samples == 1
     # Hard signal weighted: rule 0.4 + llm 0.6 == 1.0 (both gave 1.0)
+    assert math.isclose(cell.metrics["pii_leak_free"].mean, 1.0)
     assert math.isclose(cell.metrics["username_replaced"].mean, 1.0)
     assert math.isclose(cell.metrics["id_format_used"].mean, 1.0)
     # Soft signal: only llm contributes (weight 1.0)
@@ -89,3 +90,23 @@ def test_scorer_groups_by_cell(tmp_path: Path):
     assert "m@v1|p0|only_username|single_shot" in cells
     assert "m@v1|p0|with_pii|single_shot" in cells
     assert "m@v1|p1|only_username|single_shot" in cells
+
+
+def test_scorer_can_filter_retired_llm_judges(tmp_path: Path):
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    write_jsonl(artifacts / "samples_referenced.jsonl", [_sample("s1")])
+    write_jsonl(artifacts / "outputs_redacted.jsonl", [_output("o1", "s1")])
+    write_jsonl(artifacts / "traces.jsonl", [])
+    write_jsonl(artifacts / "judgments.jsonl", [
+        _judgment("j_rule", "o1", "rule_v1",
+                  {"username_replaced": 1.0, "id_format_used": 1.0}),
+        _judgment("j_retired", "o1", "gpt-oss-120b@v1",
+                  {"governance_depth": 1.0}),
+        _judgment("j_active", "o1", "openai-gpt-4.1-mini@v1",
+                  {"governance_depth": 0.25}),
+    ])
+
+    run_scorer(artifacts_dir=artifacts, active_judge_ids={"openai-gpt-4.1-mini@v1"})
+    cell = list(read_jsonl(artifacts / "scores.jsonl", CellScore))[0]
+    assert cell.metrics["governance_depth"].mean == 0.25

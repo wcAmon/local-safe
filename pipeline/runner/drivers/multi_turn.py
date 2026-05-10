@@ -179,6 +179,7 @@ def run_multi_turn(
             trace_id=tid, session_kind="multi_turn",
             model_id=model_cfg.model_id, sample_id=scenario.sample_id,
             scenario_id=scenario.scenario_id,
+            tested_dimensions=list(scenario.tested_dimensions),
             exposure_ledger=ledger, metadata=meta,
         )
         raw_traces.append(Trace(steps=steps_raw, **common))
