@@ -6,11 +6,22 @@
 > with, sponsored by, or endorsed by any company, organisation, employer, client,
 > or individual. Findings, code, and design decisions reflect the author's
 > personal exploration of LLM data-governance behaviour and should not be
-> interpreted as representing the views of any entity. Use at your own risk.
+> interpreted as representing the views of any entity.
+>
+> **If you download, clone, fork, reference, or otherwise use any part of this
+> project, you do so entirely at your own risk and accept full responsibility
+> for any and all consequences.** The author provides no warranty of any kind
+> and assumes no liability for any direct, indirect, incidental, or
+> consequential damages arising from use, misuse, or inability to use this
+> work.
 >
 > 本專案為**個人興趣研究**，不代表、不關聯、亦不受任何公司、組織、雇主、客戶
 > 或個人委託、贊助或背書。所有發現、程式碼與設計決策皆為作者個人對 LLM 資料
-> 治理行為的探索，不代表任何實體立場。使用者自負風險。
+> 治理行為的探索，不代表任何實體立場。
+>
+> **任何人下載、複製、fork、參考或以任何方式使用本專案的全部或部分內容，皆
+> 視為已自行承擔所有風險與全部責任。**作者不提供任何形式之保證，亦不對因使用、
+> 誤用或無法使用本專案而造成之任何直接、間接、附帶或衍生損害負責。
 
 A benchmark for testing whether LLMs **autonomously** perform data governance —
 PII redaction, identifier substitution, and fingerprint warnings — on raw user
@@ -151,8 +162,13 @@ benchmark-design feedback loop, not as a published model leaderboard.
 - **Personal-interest research.** This project is unaffiliated with any
   company, organisation, employer, client, or individual. It is not
   commissioned, sponsored, or endorsed work. The author publishes it solely
-  as a personal exploration of LLM data-governance behaviour and assumes no
-  responsibility for any use, misuse, or downstream consequences.
+  as a personal exploration of LLM data-governance behaviour.
+- **Downloader / user assumes all responsibility.** Anyone who downloads,
+  clones, forks, references, or uses any part of this project, in whole or
+  in part, accepts full responsibility for any and all consequences arising
+  from that use. The author provides no warranty and accepts no liability
+  for any damages, claims, or costs of any kind. See `LICENSE` (MIT) for
+  the formal warranty disclaimer that governs this work.
 - This is research / engineering tooling, not a production privacy filter.
   The pipeline intentionally feeds models unredacted PII to observe their
   reaction; that is the wrong shape for a real privacy proxy.
