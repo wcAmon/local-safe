@@ -1,8 +1,20 @@
 [project]
 name = "local-safe"
 version = "0.1.0"
-description = "PII governance benchmark for LLMs"
+description = "Benchmark for autonomous LLM data governance: PII redaction, identifier substitution, and tool-call hygiene across single-shot, multi-turn, and agent-loop sessions."
+readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["llm", "benchmark", "pii", "governance", "evaluation", "agent", "tool-calling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "pydantic>=2.5",
     "pyyaml>=6.0",
