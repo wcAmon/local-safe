@@ -24,8 +24,8 @@ def test_load_prompts_strength_increasing():
 
 def test_load_models_under_test_count():
     cfg = load_models(REPO_ROOT / "config" / "models.yaml")
-    assert len(cfg.under_test) == 2
-    assert {m.model_id for m in cfg.under_test} == {"qwen3.6-35b-a3b@v1", "gemma4-26b-a4b-it@v1"}
+    assert len(cfg.under_test) == 4
+    assert {m.model_id for m in cfg.under_test} == {"qwen3.6-35b-a3b@v1", "gemma4-26b-a4b-it@v1", "gemma4-e4b-it@v1", "qwen3.5-9b@v1"}
 
 
 def test_load_models_includes_rule_and_llm_judge():
