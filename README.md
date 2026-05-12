@@ -140,12 +140,13 @@ inference; the test waits up to 30 minutes per stage.
 
 ## Current Leaderboard
 
-> **Snapshot**: 2026-05-12 (run `20260512-195227`). Six models, ~12 single-shot
-> cells × 4 seeds + 6 multi-turn traces + 11 agent-loop traces per model.
-> Source: `reports/20260512-195227/leaderboard.md` (full per-cell tables) and
-> `radar_data.json` (6-axis × 3-track scores used here). Quantization
-> disclosed: all six models are GGUF, Q4-Q8. **Treat as benchmark-design
-> feedback, not as a model leaderboard for publication.**
+The three tables below are auto-generated from the latest report. Regenerate
+with `make leaderboard` after `make report`. The `### Analysis` subsection is
+hand-written and stays unchanged.
+
+<!-- LEADERBOARD:AUTO-START -->
+
+> **Snapshot**: auto-generated from `reports/20260512-195227/radar_data.json` (2026-05-12 19:52 UTC). 6 models × 6 axes × 3 tracks. Regenerate with `make leaderboard` after `make report`. All scores in [0,1]; higher is better.
 
 ### Overall composite (mean across 6 axes × 3 tracks)
 
@@ -162,11 +163,11 @@ inference; the test waits up to 30 minutes per stage.
 
 | Model | single_shot (autonomy-sensitive) | multi_shot | agentic_workflow |
 |---|---|---|---|
-| `gpt-oss-safeguard-120b` | 0.47 | 0.70 | 0.81 |
+| `gpt-oss-safeguard-120b` | 0.47 | 0.70 | 0.80 |
 | `gemma4-e4b-it` | 0.47 | **0.72** | 0.77 |
 | `gemma4-26b-a4b-it` | **0.51** | 0.49 | **0.84** |
 | `gpt-oss-safeguard-20b` | 0.35 | 0.65 | 0.82 |
-| `qwen3.5-9b` | 0.24 | 0.69 | 0.83 |
+| `qwen3.5-9b` | 0.23 | 0.69 | 0.83 |
 | `qwen3.6-35b-a3b` | 0.21 | 0.68 | 0.83 |
 
 ### Per-axis composite (mean across 3 tracks)
@@ -181,6 +182,8 @@ Bold = top-of-column. Tie marks (=) indicate ties.
 | `gpt-oss-safeguard-20b` | 0.60 | 0.13 | 0.67 | 0.81 | 0.70 | 0.73 |
 | `qwen3.5-9b` | 0.62 | 0.12 | 0.61 | 0.71 | 0.81 | 0.66 |
 | `qwen3.6-35b-a3b` | 0.54 | 0.12 | 0.65 | 0.67 | 0.79 | 0.67 |
+
+<!-- LEADERBOARD:AUTO-END -->
 
 ### Analysis
 
