@@ -138,6 +138,79 @@ The opt-in smoke runs the entire pipeline against a live OpenAI-compatible
 endpoint (and an Anthropic API key if set). Expect minutes of cold-start /
 inference; the test waits up to 30 minutes per stage.
 
+## Current Leaderboard
+
+> **Snapshot**: 2026-05-12 (run `20260512-195227`). Six models, ~12 single-shot
+> cells × 4 seeds + 6 multi-turn traces + 11 agent-loop traces per model.
+> Source: `reports/20260512-195227/leaderboard.md` (full per-cell tables) and
+> `radar_data.json` (6-axis × 3-track scores used here). Quantization
+> disclosed: all six models are GGUF, Q4-Q8. **Treat as benchmark-design
+> feedback, not as a model leaderboard for publication.**
+
+### Overall composite (mean across 6 axes × 3 tracks)
+
+| Rank | Model | Family / shape | Composite |
+|---|---|---|---|
+| #1 | `gpt-oss-safeguard-120b` | gpt-oss safety-tuned, MoE 117B/5.1B | **0.658** |
+| #2 | `gemma4-e4b-it` | gemma, ~5B dense | 0.651 |
+| #3 | `gemma4-26b-a4b-it` | gemma, MoE 26B/4B | 0.615 |
+| #4 | `gpt-oss-safeguard-20b` | gpt-oss safety-tuned, 20B dense | 0.605 |
+| #5 | `qwen3.5-9b` | qwen, 9B dense (prev gen) | 0.588 |
+| #6 | `qwen3.6-35b-a3b` | qwen, MoE 35B/3B | 0.573 |
+
+### Per-track composite (mean across 6 axes within each track)
+
+| Model | single_shot (autonomy-sensitive) | multi_shot | agentic_workflow |
+|---|---|---|---|
+| `gpt-oss-safeguard-120b` | 0.47 | 0.70 | 0.81 |
+| `gemma4-e4b-it` | 0.47 | **0.72** | 0.77 |
+| `gemma4-26b-a4b-it` | **0.51** | 0.49 | **0.84** |
+| `gpt-oss-safeguard-20b` | 0.35 | 0.65 | 0.82 |
+| `qwen3.5-9b` | 0.24 | 0.69 | 0.83 |
+| `qwen3.6-35b-a3b` | 0.21 | 0.68 | 0.83 |
+
+### Per-axis composite (mean across 3 tracks)
+
+Bold = top-of-column. Tie marks (=) indicate ties.
+
+| Model | direct_privacy | identity_subst | fingerprint | cloud_tool | task_utility | reverse_resist |
+|---|---|---|---|---|---|---|
+| `gpt-oss-safeguard-120b` | 0.63 | 0.12 | **=0.71** | **=0.95** | 0.73 | **0.81** |
+| `gemma4-e4b-it` | **0.69** | 0.04 | **=0.71** | **=0.95** | 0.78 | 0.74 |
+| `gemma4-26b-a4b-it` | 0.59 | **0.16** | 0.70 | 0.62 | **0.83** | 0.79 |
+| `gpt-oss-safeguard-20b` | 0.60 | 0.13 | 0.67 | 0.81 | 0.70 | 0.73 |
+| `qwen3.5-9b` | 0.62 | 0.12 | 0.61 | 0.71 | 0.81 | 0.66 |
+| `qwen3.6-35b-a3b` | 0.54 | 0.12 | 0.65 | 0.67 | 0.79 | 0.67 |
+
+### Analysis
+
+- **No model sweeps.** The top two on composite (`gpt-oss-safeguard-120b` and
+  `gemma4-e4b-it`) trade specific axes: 120B leads on the safety reflexes
+  (`cloud_tool_safety`, `reverse_resistance`, tied on `fingerprint`), while
+  gemma4-e4b leads on `direct_privacy` and ties on the same two. Different
+  again, `gemma4-26b-a4b-it` is the only model in the top tier on
+  `single_shot` (0.51) and owns both `identity_substitution` and
+  `task_utility`. *Pick by what you actually care about, not by composite.*
+- **Within-family variance dominates between-family variance.**
+  Smaller-and-newer `gemma4-e4b-it` beats `gemma4-26b-a4b-it` on most
+  weak-prompt cells; older-and-smaller `qwen3.5-9b` beats `qwen3.6-35b-a3b`
+  on multi-turn governance; and `gpt-oss-safeguard-120b` beats its 20B
+  sibling on every axis except `task_utility` in the agent track. Single-
+  model-per-family claims do not survive a second model.
+- **The safety/utility trade-off is visible and scale-dependent.** Both
+  gpt-oss safeguard variants pay for safety reflexes with `task_utility`,
+  but the cost lands in different tracks: the 20B drops on `multi_shot`
+  (0.46, last of six on that track-axis pair); the 120B recovers there
+  (0.75) but drops on `agentic_workflow` (0.56, also last of six).
+- **Autonomous governance under neutral prompts is still effectively zero.**
+  Across 18 `p0_neutral` cells × 6 models, only `gpt-oss-safeguard-120b`
+  produced any non-zero `username_replaced` (mean 0.175 on
+  `single_post / cross_thread`). The other five models stay at exact 0.00.
+  Models still need explicit instructions to anonymise.
+
+For the version-by-version story behind these numbers — including which
+findings replaced which — see `## Findings` below.
+
 ## Findings (illustrative)
 
 Live smoke against six open-source models served via local `ollama-hub`
