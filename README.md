@@ -140,22 +140,54 @@ inference; the test waits up to 30 minutes per stage.
 
 ## Findings (illustrative)
 
-Live smoke against four open-source models served via local `ollama-hub`
-(llama.cpp + GGUF) in two families:
+Live smoke against five open-source models served via local `ollama-hub`
+(llama.cpp + GGUF) in three families:
 
 - **gemma family**: `gemma4-26b-a4b-it` (MoE 26B/4B, v0.1.0), `gemma4-e4b-it` (~5B, v0.2.0)
 - **qwen family**: `qwen3.6-35b-a3b` (MoE 35B/3B, v0.1.0), `qwen3.5-9b` (dense 9B, prev gen, v0.2.0)
+- **gpt-oss family**: `gpt-oss-safeguard-20b` (dense 20B, safety-tuned variant, v0.3.0)
 
-### Stable across all 4 models
+### Stable across all 5 models
 
 - **Pure autonomy is essentially zero.** Under `p0_neutral` ("整理這份資料"),
-  all four models score near 0.00 on `username_replaced` — they never
-  spontaneously anonymise.
+  all five models score near 0.00 on `username_replaced` — they never
+  spontaneously anonymise. Adding the *safety-tuned* `gpt-oss-safeguard-20b`
+  did not break this: it scores 0.00 on p0 `username_replaced` like the rest.
 - **Geographic markers are never recognised as PII.** `新莊`, `台積電`, `台北`,
-  `內湖` are kept verbatim in 100% of outputs across all four models. Of 56
-  v0.2.0 outputs containing Taiwan-area markers in the input, 318 marker
-  mentions persisted in the responses (matcher caught 24 location + 24 org
-  leaks from these alone).
+  `內湖` are kept verbatim in 100% of outputs across all four open-weight
+  models. The fifth model (`gpt-oss-safeguard-20b`) preserves `新莊` in 15/42
+  and `台積電` in 17/42 of its raw outputs — the same blind spot, just
+  expressed at a lower base rate because its responses are often shorter.
+
+### Safety tuning ≠ autonomous governance (v0.3.0 — gpt-oss-safeguard-20b)
+
+The "safeguard" branding on `gpt-oss-safeguard-20b` did not deliver better
+autonomous governance. Across all axes × tracks it ranks **#3 of 5
+(composite 0.605)**, sitting between the gemma family and the qwen family
+rather than above either:
+
+| Track | gemma4-26b | gemma4-e4b | **gpt-oss-safeguard-20b** | qwen3.5-9b | qwen3.6-35b |
+|---|---|---|---|---|---|
+| single_shot (autonomy-sensitive) | **0.51** | 0.47 | 0.35 | 0.24 | 0.21 |
+| multi_shot | 0.49 | **0.72** | 0.65 | 0.69 | 0.68 |
+| agentic_workflow | **0.84** | 0.77 | 0.82 | 0.83 | 0.83 |
+
+Two specific patterns stand out:
+
+- **It never wins any axis × track cell.** No `★ #1` in 18 axis × track cells.
+  The only mild signal of safety tuning is a non-zero `governance_depth=0.12`
+  and `fingerprint_leak_free=0.06` on `p0_neutral / single_post / cross_thread`,
+  cells where all four other models sit at exactly 0.00. Effect size is small
+  enough to need more seeds before treating it as a real signal.
+- **It pays for safety with utility.** `task_utility` is the lowest of all
+  five models on both `multi_shot` (0.46 vs gemma4-26b's 0.75) and
+  `agentic_workflow` (0.69 vs qwen3.6-35b's 0.79) — classic safety-tuning
+  trade-off, this time visible at the dimension level.
+
+The third-family addition therefore strengthens, rather than weakens, the
+"family-level claims are unreliable" lesson below: adding a *safety-tuned*
+model from a new architecture family produces a *middle-of-pack* result, not
+a step-change.
 
 ### Family-pattern claims that do *not* hold
 
@@ -179,9 +211,9 @@ governance dimensions. Tactic-level claims (one tactic per family) need
 `reports/<run_id>/pattern_stability.md` for the full 5-question
 reproducibility check and reframing options.
 
-These are observations on a small fixture (12 cells × 4 models in single-shot,
+These are observations on a small fixture (12 cells × 5 models in single-shot,
 ~10 traces per model in multi-turn / agent-loop). Quantization confound
-disclosed: all four models are GGUF (Q4-Q6). Useful as benchmark-design
+disclosed: all five models are GGUF (Q4–Q8). Useful as benchmark-design
 feedback, not as a published model leaderboard.
 
 ## Disclaimers
