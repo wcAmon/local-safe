@@ -32,13 +32,14 @@ END_MARK = "<!-- LEADERBOARD:AUTO-END -->"
 # Hand-maintained model descriptions for the "Family / shape" column.
 # Add an entry when adding a new model. Missing entries render as "—".
 MODEL_META: dict[str, str] = {
-    "gpt-oss-safeguard-120b@v1": "gpt-oss safety-tuned, MoE 117B/5.1B",
-    "gemma4-e4b-it@v1": "gemma, ~5B dense",
-    "gpt-oss-120b@v1": "gpt-oss base, MoE 117B/5.1B",
-    "gemma4-26b-a4b-it@v1": "gemma, MoE 26B/4B",
-    "gpt-oss-safeguard-20b@v1": "gpt-oss safety-tuned, 20B dense",
-    "qwen3.5-9b@v1": "qwen, 9B dense (prev gen)",
-    "qwen3.6-35b-a3b@v1": "qwen, MoE 35B/3B",
+    "gpt-oss-safeguard-120b@v1": "gpt-oss safety-tuned, MoE 117B/5.1B (local Q4)",
+    "gemma4-e4b-it@v1": "gemma, ~5B dense (local Q8)",
+    "gpt-oss-120b@v1": "gpt-oss base, MoE 117B/5.1B (local Q4)",
+    "gemma4-26b-a4b-it@v1": "gemma, MoE 26B/4B (local Q8)",
+    "gpt-oss-safeguard-20b@v1": "gpt-oss safety-tuned, 20B dense (local Q8)",
+    "claude-haiku-4-5@v1": "Anthropic, cloud (full precision)",
+    "qwen3.5-9b@v1": "qwen, 9B dense (prev gen, local Q8)",
+    "qwen3.6-35b-a3b@v1": "qwen, MoE 35B/3B (local Q6)",
 }
 
 AXIS_DISPLAY = {
