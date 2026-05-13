@@ -38,6 +38,7 @@ MODEL_META: dict[str, str] = {
     "gemma4-26b-a4b-it@v1": "gemma, MoE 26B/4B (local Q8)",
     "gpt-oss-safeguard-20b@v1": "gpt-oss safety-tuned, 20B dense (local Q8)",
     "claude-haiku-4-5@v1": "Anthropic, cloud (full precision)",
+    "claude-sonnet-4-6@v1": "Anthropic, cloud (full precision)",
     "qwen3.5-9b@v1": "qwen, 9B dense (prev gen, local Q8)",
     "qwen3.6-35b-a3b@v1": "qwen, MoE 35B/3B (local Q6)",
 }
