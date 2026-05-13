@@ -34,6 +34,7 @@ END_MARK = "<!-- LEADERBOARD:AUTO-END -->"
 MODEL_META: dict[str, str] = {
     "gpt-oss-safeguard-120b@v1": "gpt-oss safety-tuned, MoE 117B/5.1B",
     "gemma4-e4b-it@v1": "gemma, ~5B dense",
+    "gpt-oss-120b@v1": "gpt-oss base, MoE 117B/5.1B",
     "gemma4-26b-a4b-it@v1": "gemma, MoE 26B/4B",
     "gpt-oss-safeguard-20b@v1": "gpt-oss safety-tuned, 20B dense",
     "qwen3.5-9b@v1": "qwen, 9B dense (prev gen)",
