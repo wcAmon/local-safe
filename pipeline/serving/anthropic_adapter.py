@@ -17,6 +17,12 @@ PRICING: dict[str, dict[str, float]] = {
         "cache_write": 18.75 / 1_000_000,
         "cache_read":   1.50 / 1_000_000,
     },
+    "claude-haiku-4-5-20251001": {
+        "input":        1.00 / 1_000_000,
+        "output":       5.00 / 1_000_000,
+        "cache_write":  1.25 / 1_000_000,
+        "cache_read":   0.10 / 1_000_000,
+    },
 }
 
 
