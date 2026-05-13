@@ -1,6 +1,6 @@
 PYTHON := uv run python
 CLI    := $(PYTHON) -m pipeline.cli
-REDDIT ?= tests/fixtures/tiny_reddit.jsonl
+REDDIT ?= tests/fixtures/tiny_reddit_v2.jsonl
 
 .PHONY: help test samples samples-multi run run-multi-turn run-agent-loop agent judge-rule judge-llm judge-llm-all score report leaderboard all clean-artifacts
 
