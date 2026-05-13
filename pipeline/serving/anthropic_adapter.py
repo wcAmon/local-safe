@@ -1,6 +1,7 @@
 """Anthropic adapter with prompt caching for the rubric system block."""
 
 from __future__ import annotations
+import json
 import time
 from typing import Any
 from anthropic import Anthropic
@@ -79,8 +80,7 @@ class AnthropicAdapter:
         tools: list[ToolSpec] | None = None,
     ) -> ModelResponse:
         sys_text = "\n\n".join(m.content for m in messages if m.role == "system")
-        chat = [{"role": m.role, "content": m.content}
-                for m in messages if m.role != "system"]
+        chat = _build_anthropic_chat(messages)
         kwargs: dict[str, Any] = {
             "model": self.api_model,
             "max_tokens": int(params.get("max_tokens", 2048)),
@@ -143,3 +143,79 @@ class AnthropicAdapter:
             },
             tool_calls=tool_calls,
         )
+
+
+def _build_anthropic_chat(messages: list[Message]) -> list[dict]:
+    """Convert agent_loop Messages into Anthropic chat blocks.
+
+    The runner uses OpenAI-flavoured tool roundtrip (``Message(role="assistant",
+    tool_calls=[...])`` followed by ``Message(role="tool", content=result)``).
+    Anthropic requires ``tool_use`` content blocks inline in the assistant
+    message and ``tool_result`` blocks in a single subsequent user message,
+    paired by ``tool_use_id``. This function does that transposition.
+    """
+    chat: list[dict] = []
+    msgs = [m for m in messages if m.role != "system"]
+    i = 0
+    while i < len(msgs):
+        m = msgs[i]
+        if m.role == "assistant" and m.tool_calls:
+            blocks, ids = _assistant_to_anthropic_blocks(m)
+            chat.append({"role": "assistant", "content": blocks})
+            i += 1
+            results: list[dict] = []
+            while i < len(msgs) and msgs[i].role == "tool":
+                k = len(results)
+                tid = ids[k] if k < len(ids) else f"toolu_synth_{k}"
+                results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tid,
+                    "content": msgs[i].content,
+                })
+                i += 1
+            if results:
+                chat.append({"role": "user", "content": results})
+        elif m.role == "tool":
+            # Orphan tool result — shouldn't happen in well-formed runs.
+            i += 1
+        else:
+            chat.append({"role": m.role, "content": m.content})
+            i += 1
+    return chat
+
+
+def _assistant_to_anthropic_blocks(m: Message) -> tuple[list[dict], list[str]]:
+    """Returns (content_blocks, tool_use_ids).
+
+    ``m.tool_calls`` can be:
+    - Anthropic shape (from this adapter's prior raw_meta["anthropic_content"]):
+      a list of mixed text/tool_use content blocks.
+    - OpenAI-compat shape (from openai_compat's raw_meta["openai_tool_calls"]):
+      a list of ``{id, type:"function", function:{name, arguments(JSON string)}}``.
+    """
+    tcs = list(m.tool_calls or [])
+    is_anthropic_shape = bool(tcs) and tcs[0].get("type") in ("text", "tool_use")
+    if is_anthropic_shape:
+        ids = [b["id"] for b in tcs if b.get("type") == "tool_use" and b.get("id")]
+        return tcs, ids
+    blocks: list[dict] = []
+    if m.content:
+        blocks.append({"type": "text", "text": m.content})
+    ids: list[str] = []
+    for tc in tcs:
+        fn = tc.get("function", {})
+        args = fn.get("arguments", "{}")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        tid = tc.get("id") or f"toolu_{len(ids)}"
+        blocks.append({
+            "type": "tool_use",
+            "id": tid,
+            "name": fn.get("name"),
+            "input": args,
+        })
+        ids.append(tid)
+    return blocks, ids
