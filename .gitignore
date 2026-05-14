@@ -20,6 +20,9 @@ reports/
 # OS
 .DS_Store
 
+# Claude Code session state
+.claude/
+
 # uv lock — keep, but cache dirs out
 uv.lock.bak
 
