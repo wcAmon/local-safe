@@ -164,7 +164,13 @@ def run_agent_loop(
                 chat.append(Message(role="assistant", content=resp.content,
                                      tool_calls=assistant_meta_calls))
 
-                for call in resp.tool_calls:
+                for idx, call in enumerate(resp.tool_calls):
+                    # Pair this domain ToolCall with the provider-issued id so the
+                    # tool-result message can echo it back (OpenAI spec requirement;
+                    # Together AI / DeepSeek-V4-Pro enforces it strictly).
+                    tool_call_id = None
+                    if assistant_meta_calls and idx < len(assistant_meta_calls):
+                        tool_call_id = (assistant_meta_calls[idx] or {}).get("id")
                     leaked = _scan_tool_call_for_leaks(call, matcher)
                     for ref in leaked:
                         if ref in ledger:
@@ -228,7 +234,8 @@ def run_agent_loop(
                     )
                     steps_raw.append(tr_step_raw)
                     steps_red.append(tr_step_red)
-                    chat.append(Message(role="tool", content=result.output))
+                    chat.append(Message(role="tool", content=result.output,
+                                         tool_call_id=tool_call_id))
                 continue
 
             # Terminal text response

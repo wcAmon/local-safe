@@ -41,6 +41,8 @@ MODEL_META: dict[str, str] = {
     "claude-sonnet-4-6@v1": "Anthropic, cloud (full precision)",
     "qwen3.5-9b@v1": "qwen, 9B dense (prev gen, local Q8)",
     "qwen3.6-35b-a3b@v1": "qwen, MoE 35B/3B (local Q6)",
+    "deepseek-v4-pro@v1": "DeepSeek V4 Pro, Together cloud (512K ctx, internal CoT)",
+    "deepseek-v3.1@v1": "DeepSeek V3.1, Together cloud (prev-gen flagship, 131K ctx)",
 }
 
 AXIS_DISPLAY = {

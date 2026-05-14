@@ -42,9 +42,16 @@ class BudgetGuard:
     @classmethod
     def from_config(cls, budget_yaml_path: Path, cost_log_path: Path) -> "BudgetGuard":
         cfg = yaml.safe_load(budget_yaml_path.read_text(encoding="utf-8"))
+        # per_judge_cap and per_model_cap share the same key space (actor_id);
+        # the YAML split is organisational — judges vs under_test models.
+        caps: dict[str, float] = {}
+        for k, v in (cfg.get("per_judge_cap") or {}).items():
+            caps[k] = float(v)
+        for k, v in (cfg.get("per_model_cap") or {}).items():
+            caps[k] = float(v)
         return cls(
             total_cap=float(cfg.get("total_usd_cap", 0.0)),
-            per_judge_caps={k: float(v) for k, v in (cfg.get("per_judge_cap") or {}).items()},
+            per_judge_caps=caps,
             cost_log_path=cost_log_path,
             on_exceed=cfg.get("on_exceed", "stop_and_report"),
         )

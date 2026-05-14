@@ -41,8 +41,14 @@ DEFAULT_REPORTS = REPO_ROOT / "reports"
 def _adapter_for(model_cfg):
     if model_cfg.backend == "openai_compat":
         base_url = resolve_base_url(model_cfg.base_url_env)
+        api_key = "unused"
+        if model_cfg.api_key_env:
+            api_key = os.environ.get(model_cfg.api_key_env) or ""
+            if not api_key:
+                sys.exit(f"missing env var {model_cfg.api_key_env!r}")
         return OpenAICompatAdapter(
             model_id=model_cfg.model_id, api_model=model_cfg.api_model, base_url=base_url,
+            api_key=api_key,
             timeout=model_cfg.params.get("timeout"),
             max_retries=model_cfg.params.get("max_retries"),
         )
@@ -93,6 +99,10 @@ def cmd_run(args: argparse.Namespace) -> None:
             sys.exit(f"unknown prompt_id: {args.prompt!r}")
     samples = list(read_jsonl(DEFAULT_VAULT / "samples_raw.jsonl", Sample))
     salt = os.environ.get("LOCAL_SAFE_VAULT_KEY", "phase1-default-salt")
+    from pipeline.serving.budget import BudgetGuard
+    budget_guard = BudgetGuard.from_config(
+        DEFAULT_CONFIG / "budget.yaml", DEFAULT_ARTIFACTS / "cost.jsonl",
+    )
     total_added = 0
     # Model-major loop (per spec §10.5: single-resident swap)
     for model_cfg in models_cfg.under_test:
@@ -100,6 +110,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         n = run_single_shot(
             adapter=adapter, model_cfg=model_cfg, prompts=prompts,
             samples=samples, vault_dir=DEFAULT_VAULT, artifacts_dir=DEFAULT_ARTIFACTS, salt=salt,
+            budget_guard=budget_guard,
         )
         print(f"[{model_cfg.model_id}] added {n} outputs")
         total_added += n

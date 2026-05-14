@@ -14,6 +14,9 @@ from .base import Message, ModelResponse
 PRICING: dict[str, dict[str, float]] = {
     # USD per token. Keep this conservative and update alongside model config.
     "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
+    # Together AI — pulled from /v1/models pricing fields (2026-05-14).
+    "deepseek-ai/DeepSeek-V4-Pro": {"input": 2.10 / 1_000_000, "output": 4.40 / 1_000_000},
+    "deepseek-ai/DeepSeek-V3.1": {"input": 0.60 / 1_000_000, "output": 1.70 / 1_000_000},
 }
 
 

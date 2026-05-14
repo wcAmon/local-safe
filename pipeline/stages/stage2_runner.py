@@ -9,7 +9,9 @@ Idempotent via deterministic output_id; existing rows are skipped.
 from __future__ import annotations
 import datetime as dt
 import hashlib
+import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 from pipeline.schemas import Sample, Output, OutputMeta
 from pipeline.config import ModelConfig, PromptConfig
 from pipeline.serving.base import ModelAdapter, Message
@@ -17,6 +19,11 @@ from pipeline.pii.matcher import PIIMatcher
 from pipeline.pii.tokens import PIIKind
 from pipeline.jsonl_io import read_jsonl, append_jsonl_idempotent
 from pipeline.stages.stage1_dataset import MappingRow
+
+if TYPE_CHECKING:
+    from pipeline.serving.budget import BudgetGuard
+
+logger = logging.getLogger(__name__)
 
 
 def output_id_for(model_id: str, prompt_id: str, sample_id: str, seed: int) -> str:
@@ -61,8 +68,14 @@ def run_single_shot(
     vault_dir: Path,
     artifacts_dir: Path,
     salt: str,
+    budget_guard: "BudgetGuard | None" = None,
 ) -> int:
-    """Run all (prompt, sample) cells for the given adapter. Returns rows added."""
+    """Run all (prompt, sample) cells for the given adapter. Returns rows added.
+
+    If a `budget_guard` is supplied, costs are recorded against `model_cfg.model_id`
+    and the per-model cap halts the loop early (stop_and_report). Halt is best-effort
+    at the granularity of a single (prompt, sample) cell; partial rows are flushed.
+    """
     seed = int(model_cfg.params.get("seed", 0))
     raw_path = vault_dir / "outputs_raw.jsonl"
     red_path = artifacts_dir / "outputs_redacted.jsonl"
@@ -73,18 +86,34 @@ def run_single_shot(
     redacted_rows: list[Output] = []
 
     existing_raw = _existing_output_ids(raw_path)
+    halted = False
 
     for prompt in prompts:
+        if halted:
+            break
         for sample in samples:
             oid = output_id_for(model_cfg.model_id, prompt.prompt_id, sample.sample_id, seed)
             if oid in existing_raw:
                 continue
+            if budget_guard and not budget_guard.check_before_call(model_cfg.model_id):
+                logger.warning(
+                    "[%s] budget cap reached; halting single-shot loop with partial outputs",
+                    model_cfg.model_id,
+                )
+                halted = True
+                break
             rendered = prompt.template.format(content=sample.content)
             resp = adapter.generate(
                 [Message(role="user", content=rendered)],
                 params=model_cfg.params,
                 request_id=oid,
             )
+            if budget_guard and resp.cost_usd:
+                budget_guard.record(
+                    judge_id=model_cfg.model_id, cost_usd=resp.cost_usd,
+                    output_id=oid, stage="single_shot",
+                    tokens_in=resp.tokens_in, tokens_out=resp.tokens_out,
+                )
             redacted_text, leaked = matcher.redact_output(resp.content, partial=True)
 
             meta = OutputMeta(

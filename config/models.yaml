@@ -61,6 +61,30 @@ under_test:
       temperature: 0.0
       seed: 42
       max_tokens: 2048
+  - model_id: deepseek-v4-pro@v1
+    backend: openai_compat
+    api_model: "deepseek-ai/DeepSeek-V4-Pro"
+    base_url_env: TOGETHER_AI_BASE_URL
+    api_key_env: TOGETHER_AI_API_KEY
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 2048
+      timeout: 90
+      max_retries: 2
+    notes: "Together AI cloud, DeepSeek V4 generation (Pro tier, 512K ctx). Longer timeout for internal reasoning tokens."
+  - model_id: deepseek-v3.1@v1
+    backend: openai_compat
+    api_model: "deepseek-ai/DeepSeek-V3.1"
+    base_url_env: TOGETHER_AI_BASE_URL
+    api_key_env: TOGETHER_AI_API_KEY
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 2048
+      timeout: 60
+      max_retries: 2
+    notes: "Together AI cloud, DeepSeek V3.1 (prev-gen flagship, 131K ctx). Cheaper comparison point vs V4-Pro."
   - model_id: claude-haiku-4-5@v1
     backend: anthropic
     api_model: "claude-haiku-4-5-20251001"
