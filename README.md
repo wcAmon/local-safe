@@ -208,117 +208,111 @@ Bold = top-of-column. Tie marks (=) indicate ties.
 
 ### Analysis
 
-- **GLM-5.1 breaks the top-tier tie.** `glm-5.1` (#1, 0.691) leads the
-  former tied tier — `gpt-oss-safeguard-120b` (#2, 0.658), `deepseek-v3.1`
-  (#3, 0.655), `gemma4-e4b-it` (#4, 0.651), `gpt-oss-120b` base (#5, 0.650)
-  — by **0.033**, four times the spread *inside* that tier (0.008).
-  This is the first composite gap on the board that comfortably exceeds
-  per-cell noise. GLM is also the first model to clear the previous tie
-  by **pareto improvement**: head-to-head against the former #1
-  `gpt-oss-safeguard-120b`, GLM is non-negative on all six axes
-  (`identity_substitution` +0.055, `fingerprint_safety` +0.046,
-  `task_utility` +0.041, `direct_privacy` +0.032, `reverse_resistance`
-  +0.024, `cloud_tool_safety` tied at the 0.95 ceiling). The autonomy-
-  sensitive `single_shot` track is where the gap opens widest: GLM hits
-  0.55 vs. the cluster's 0.47, including `direct_privacy / single_shot`
-  0.31 (best in the cloud cohort by far — V3.1 0.19, V4-Pro 0.21) and
-  `cloud_tool_safety / single_shot` 0.86 (V3.1 0.71, V4-Pro 0.43).
-  Confounds — quant noise (Together likely serves GLM at ~fp4),
-  internal-CoT bloat in output tokens — are flagged but the across-the-
-  board lift is large enough to survive an honest discount.
-- **Local-vs-cloud picture shifts.** The former tied tier was three
-  local + one cloud (V3.1). Adding GLM-5.1 turns that into two cloud
-  in the top three (#1 GLM, #3 V3.1) — the first time on this board
-  that cloud models occupy more of the leading group than locals.
-  Anthropic's two entries still anchor the middle (#6 Sonnet 0.635,
-  #10 Haiku 0.589). Read this as **cloud-vendor-and-generation
-  matters, but the latest "Pro" SKU isn't automatically the safer one**
-  (see deepseek inversion below; gpt-oss safeguard's lone local seat in
-  the top tier holds).
-- **Within DeepSeek, newer-bigger isn't safer.** `deepseek-v4-pro`
-  (#6, 0.619, 512K ctx, internal CoT) trails `deepseek-v3.1` (#2,
-  0.655, 131K ctx, no surfaced CoT) by 0.036 composite. Drilling into
-  axis × track cells (rather than the smoother per-axis means):
-    - **Biggest single regression**: `cloud_tool_safety / single_shot`
-      drops from V3.1 0.71 to V4-Pro 0.43 (**−0.29**). When a single
-      user prompt asks for a cloud tool invocation, V4-Pro is much
-      more willing to pass raw PII into the tool call.
-    - **Multi-turn pressure**: V4-Pro folds further on
-      `direct_privacy / multi_shot` (0.67 vs V3.1 0.83, **−0.17**) and
-      on `identity_substitution / multi_shot` (0.00 vs 0.17, **−0.17**).
-      V3.1's refusal stance survives multi-turn nudging more often.
-    - **One cell V4-Pro genuinely wins**: `fingerprint_safety /
-      multi_shot` (0.83 vs V3.1 0.54, **+0.29**) — but this is
-      "filling a hole" in V3.1's profile, not extending a lead.
-      Across every other strong-prompt axis, V4-Pro is ≤ V3.1.
-    - **Cost asymmetry compounds it**: internal-CoT output bloat
-      (smoke test: 45 vs 3 output tokens to reply "pong") plus
-      Together's per-token rate (V4-Pro $2.10/$4.40 vs V3.1 $0.60/$1.70
-      per 1M in/out) makes V4-Pro **~8× more expensive per equivalent
-      task** while scoring lower on governance. For governance use the
-      cheaper, older flagship is the better buy.
-  This is the third within-family inversion on this benchmark (gemma:
-  e4b > 26b-a4b; qwen: 3.5-9b > 3.6-35b; now deepseek: V3.1 > V4-Pro).
-  Plausible mechanism — to be tested separately — is that
+Six findings carry across the current 13-model board. The first two
+report the leader and the strongest cross-vendor signal; the next two
+sharpen what cloud / vendor / fine-tune actually buy; the last two
+expose where the composite ranking misleads.
+
+- **GLM-5.1 leads by a margin that exceeds noise — a first on this
+  board.** `glm-5.1` (#1, 0.691) clears the former tied tier
+  (`gpt-oss-safeguard-120b` 0.658, `deepseek-v3.1` 0.655,
+  `gemma4-e4b-it` 0.651, `gpt-oss-120b` base 0.650) by **0.033**, four
+  times the spread *inside* that tier (0.008). It is also the first
+  composite winner that is **pareto-positive** against the previous #1:
+  head-to-head versus `gpt-oss-safeguard-120b`, GLM is non-negative on
+  all six axes (`identity_substitution` +0.055, `fingerprint_safety`
+  +0.046, `task_utility` +0.041, `direct_privacy` +0.032,
+  `reverse_resistance` +0.024, `cloud_tool_safety` tied at the 0.95
+  ceiling). The lead opens widest on autonomy-sensitive `single_shot`
+  cells (GLM 0.55 vs former tier ~0.47), particularly
+  `direct_privacy / single_shot` 0.31 (vs DeepSeek V3.1 0.19, V4-Pro
+  0.21) and `cloud_tool_safety / single_shot` 0.86 (vs 0.71, 0.43).
+  Confounds — Together likely serves GLM at ~fp4, and internal-CoT
+  bloats output tokens — are flagged but the lift is large enough to
+  survive an honest discount.
+
+- **Newer/bigger flagships score *worse* on governance — three vendors
+  now confirm.** The strongest cross-vendor signal on the board:
+    - **gemma**: `gemma4-e4b-it` (~5B dense) #4 / 0.651 > `gemma4-26b-a4b-it`
+      (MoE 26B/4B) #8 / 0.615 > **`gemma4-31b-it` (31B dense)** #12 /
+      0.585. The biggest gemma is the worst. Damage concentrates on
+      `reverse_resistance` (5B 0.74, 26B-A4B 0.79, **31B 0.67**, a
+      −0.12 dive vs the MoE sibling).
+    - **qwen**: `qwen3.5-9b` #11 / 0.588 beats `qwen3.6-35b-a3b`
+      #13 / 0.573 (older-smaller > newer-bigger) on multi-turn
+      governance.
+    - **deepseek**: `deepseek-v3.1` (prev-gen, no surfaced CoT) #3 /
+      0.655 versus `deepseek-v4-pro` (V4 flagship, internal CoT,
+      512K ctx) #7 / 0.619 — a 0.036 composite gap. Drilling into
+      axis × track cells: `cloud_tool_safety / single_shot` collapses
+      from V3.1 0.71 to V4-Pro 0.43 (**−0.29**, the biggest single
+      regression on the board); `direct_privacy / multi_shot` 0.67 vs
+      0.83 (**−0.17**); `identity_substitution / multi_shot` 0.00 vs
+      0.17 (**−0.17**). V4-Pro wins exactly one cell —
+      `fingerprint_safety / multi_shot` (+0.29) — by filling a hole in
+      V3.1's profile, not by extending a lead. Cost asymmetry compounds
+      it: V4-Pro's internal-CoT output bloat (45 vs 3 tokens to reply
+      "pong") plus Together's per-token rate (V4-Pro $2.10/$4.40 vs
+      V3.1 $0.60/$1.70 per 1M in/out) makes V4-Pro **~8× more
+      expensive** per equivalent task while scoring lower on governance.
+  Across all three families the regression concentrates on
+  `reverse_resistance` and on multi-turn / tool-touching cells where
+  the model is asked to "help" with something that touches raw PII.
+  Working hypothesis — to be tested separately — is that
   recent-generation flagships are tuned harder for autonomous task
-  completion, which raises compliance with PII-touching user requests
-  the older instruct-style ancestors would have refused.
-- **Cloud baselines don't dominate; bigger cloud helps a lot.**
-  `claude-sonnet-4-6` lands at #6 (0.635), and `claude-haiku-4-5` at
-  #10 (0.589) — both Anthropic entries sit behind the top GLM / DeepSeek
-  cloud rows. Within Anthropic the
-  Sonnet/Haiku gap is 0.046, which is **larger than the local top-tier
-  spread (0.008)** — the same-vendor scale step has more effect than
-  vendor identity. The two cloud models share one real signal: both lead
-  the board on `fingerprint_safety` (Sonnet 0.83, Haiku 0.73 vs the
-  best local 0.71), so the cloud-vendor effect is concentrated there.
-  Everything else is scale-dependent, including the v0.6.0 "folds
-  under pressure" finding — that was a Haiku-specific failure, not a
-  vendor signature (see v0.7.0 below).
-- **At 120B scale, safeguard fine-tuning is in the noise.** Head-to-head
-  on the same architecture, `gpt-oss-safeguard-120b` vs `gpt-oss-120b`:
-  fingerprint +0.03 and cloud_tool +0.05 in safeguard's favour;
-  reverse_resistance −0.02 in safeguard's favour (i.e. base wins);
-  direct_privacy, identity_substitution, and task_utility all tied within
-  ±0.01. No axis × track cell shows a >0.05 gap. The fine-tune's effect at
-  this scale isn't a clear win on this benchmark.
-- **Within-family variance dominates between-family variance.**
-  Smaller-and-newer `gemma4-e4b-it` beats `gemma4-26b-a4b-it` on most
-  weak-prompt cells; older-and-smaller `qwen3.5-9b` beats `qwen3.6-35b-a3b`
-  on multi-turn governance; and within the gpt-oss family the 120B base
-  ≈ 120B safeguard while both beat the 20B safeguard by ~0.05 composite.
-  Single-model-per-family claims do not survive a second model.
-- **Gemma family: bigger is worse, three-way confirmed.** With the local
-  `gemma4-31b-it` (~Q8 GGUF) now on the board, the gemma family shows a
-  clean monotone ordering by **inverse** size: `gemma4-e4b-it` (~5B)
-  #4 / 0.651, `gemma4-26b-a4b-it` (MoE 26B/4B) #8 / 0.615, and the
-  biggest dense **`gemma4-31b-it` #12 / 0.585** — the worst gemma is
-  the largest. The drop is concentrated on `reverse_resistance` (5B
-  0.74, 26B-A4B 0.79, **31B 0.67**, a −0.12 dive vs the MoE sibling).
-  31B-dense has internal CoT but the extra reasoning seems to push it
-  toward "answer the user" rather than "preserve governance" when
-  reverse-leak pressure is applied. This makes the **third family** on
-  the board to show within-family inversion (gemma, qwen, deepseek);
-  the pattern is no longer a single-vendor anecdote.
-- **The v0.9.0 Together gemma-4-31B serving failure was a happy
-  accident.** Together repeatedly timed out on `google/gemma-4-31B-it`
-  during single-shot inference, forcing us to skip the cloud variant.
+  completion and surface-reasoning, which raises compliance with
+  PII-touching user requests the older instruct-style ancestors would
+  have refused.
+
+- **The cloud-vendor effect is narrow and concentrated on
+  fingerprint_safety.** Cloud now occupies two of the top three slots
+  (#1 GLM, #3 DeepSeek V3.1) and Anthropic anchors the middle
+  (`claude-sonnet-4-6` #6 / 0.635, `claude-haiku-4-5` #10 / 0.589). The
+  one place where vendor identity, rather than scale, leaves a clean
+  signal is `fingerprint_safety`: Anthropic models lead the board
+  (Sonnet 0.83, Haiku 0.73) over the best local (0.71). Everywhere
+  else the cloud entries are explained by scale within vendor — the
+  Sonnet/Haiku composite gap of 0.046 is **larger than the entire
+  local top-tier spread (0.008)** — so "use a frontier cloud model
+  for governance" is not justified by this board outside that one axis.
+  The earlier v0.6.0 "Anthropic folds under pressure" finding was a
+  Haiku-specific failure rather than a vendor signature.
+
+- **At fixed scale, safety fine-tuning is in the noise.** Head-to-head
+  on identical architecture, `gpt-oss-safeguard-120b` vs `gpt-oss-120b`
+  base: composite 0.658 vs 0.650 (+0.008, inside the tied-tier spread).
+  Per-axis: `cloud_tool_safety` +0.048 and `fingerprint_safety` +0.034
+  in safeguard's favour; `reverse_resistance` −0.024 (base wins);
+  `direct_privacy`, `identity_substitution`, `task_utility` tied within
+  ±0.01. No axis × track cell shows a >0.05 gap. The safeguard tune
+  delivers a measurable but small lift on tool / fingerprint axes and
+  a small **regression** on reverse-pressure resistance — not a
+  uniform win.
+
+- **The composite leader is not the autonomy leader.** Across 39
+  `p0_neutral` cells × 13 models, *seven* produced any non-zero
+  `username_replaced` (autonomous anonymisation without being told):
+  `gemma4-e4b-it` mean 0.21 (max 0.42 on `single_post / cross_thread`),
+  then a ~0.08 tier of `qwen3.5-9b`, `claude-haiku-4-5`,
+  `claude-sonnet-4-6`, and `deepseek-v4-pro` (each with one 0.25 cell),
+  then `gpt-oss-safeguard-120b` 0.06 and `deepseek-v3.1` 0.03. **The
+  composite #1 (GLM-5.1) scores 0.00 on p0_neutral** — its lead comes
+  from being best when asked clearly, not from acting on weak prompts.
+  Six models score zero everywhere on p0 (`gemma4-26b-a4b-it`,
+  `gemma4-31b-it`, `glm-5.1`, `gpt-oss-120b`, `gpt-oss-safeguard-20b`,
+  `qwen3.6-35b-a3b`). Separately, `gpt-oss-120b` *base* has the highest
+  `governance_depth` on p0 (mean 0.10) but doesn't translate the
+  reasoning into action. **Models still need explicit instructions to
+  anonymise; the model most willing to act unprompted is the ~5B dense
+  gemma, not any of the 35B–120B MoEs or the cloud-vendor pair.**
+
+- **Methods note — the v0.9.0 Together gemma-4-31B serving failure was
+  free.** Together repeatedly timed out on `google/gemma-4-31B-it`
+  during single-shot inference and the cloud variant was dropped.
   Running the nominally-same weights via ollama-hub Q8 GGUF places the
-  model at #12 — bottom-third of the board — so the cloud version
-  almost certainly would not have changed any leaderboard conclusion
-  even if Together's serving had worked. "Failed-to-test" turned into
-  "tested locally instead" with no loss of signal.
-- **Autonomous governance under neutral prompts is still rare — and the
-  leader is the smallest model.** Across 39 `p0_neutral` cells × 13 models,
-  five produced non-zero `username_replaced`: `gemma4-e4b-it`
-  (mean 0.21, with 0.42 on `single_post / cross_thread`),
-  `qwen3.5-9b`, `claude-haiku-4-5`, and `claude-sonnet-4-6` (all ~0.08,
-  each with one 0.25 cell), and `gpt-oss-safeguard-120b` (0.06). The base
-  `gpt-oss-120b` shows higher *governance reasoning* on p0 cells (mean
-  governance_depth 0.10, the highest of any model) but doesn't translate
-  that into action. Models still need explicit instructions to anonymise
-  — and the model most willing to act unprompted is the ~5B dense one,
-  not any of the 35B-120B MoEs or the cloud-vendor pair.
+  model at #12 / 0.585 — bottom-third — so the cloud serving outage
+  cost no leaderboard conclusion. Documented here so future readers
+  don't reopen the question.
 
 For the version-by-version story behind these numbers — including which
 findings replaced which — see `## Findings` below.
