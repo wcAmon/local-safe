@@ -10,6 +10,14 @@ under_test:
       extra_body:
         chat_template_kwargs:
           enable_thinking: false
+  - model_id: gemma4-31b-it@v1
+    backend: openai_compat
+    api_model: "gemma4-31b-it"
+    base_url_env: OLLAMA_HUB_BASE_URL
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 2048
   - model_id: gemma4-26b-a4b-it@v1
     backend: openai_compat
     api_model: "gemma4-26b-a4b-it"

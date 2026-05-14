@@ -44,6 +44,7 @@ MODEL_META: dict[str, str] = {
     "deepseek-v4-pro@v1": "DeepSeek V4 Pro, Together cloud (512K ctx, internal CoT)",
     "deepseek-v3.1@v1": "DeepSeek V3.1, Together cloud (prev-gen flagship, 131K ctx)",
     "gemma-4-31b-it@v1": "gemma-4 31B dense it, Together cloud (~fp8, 262K ctx)",
+    "gemma4-31b-it@v1": "gemma-4 31B dense it, local Q8 (262K ctx, CoT)",
     "glm-5.1@v1": "Zhipu GLM-5.1, Together cloud (~fp4, 202K ctx, internal CoT)",
 }
 
