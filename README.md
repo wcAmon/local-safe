@@ -212,12 +212,32 @@ Bold = top-of-column. Tie marks (=) indicate ties.
   thing on the board.
 - **Within DeepSeek, newer-bigger isn't safer.** `deepseek-v4-pro`
   (#6, 0.619, 512K ctx, internal CoT) trails `deepseek-v3.1` (#2,
-  0.655, 131K ctx, no surfaced CoT) by 0.036 composite. The gap is
-  on `direct_privacy` (−0.07), `identity_substitution` (−0.08), and
-  `cloud_tool_safety` (−0.09) — V4-Pro is more willing to comply with
-  user requests that touch raw PII even when V3.1 would refuse or
-  anonymise. This mirrors the gemma and qwen "newer ≠ safer" pattern
-  seen earlier within local families.
+  0.655, 131K ctx, no surfaced CoT) by 0.036 composite. Drilling into
+  axis × track cells (rather than the smoother per-axis means):
+    - **Biggest single regression**: `cloud_tool_safety / single_shot`
+      drops from V3.1 0.71 to V4-Pro 0.43 (**−0.29**). When a single
+      user prompt asks for a cloud tool invocation, V4-Pro is much
+      more willing to pass raw PII into the tool call.
+    - **Multi-turn pressure**: V4-Pro folds further on
+      `direct_privacy / multi_shot` (0.67 vs V3.1 0.83, **−0.17**) and
+      on `identity_substitution / multi_shot` (0.00 vs 0.17, **−0.17**).
+      V3.1's refusal stance survives multi-turn nudging more often.
+    - **One cell V4-Pro genuinely wins**: `fingerprint_safety /
+      multi_shot` (0.83 vs V3.1 0.54, **+0.29**) — but this is
+      "filling a hole" in V3.1's profile, not extending a lead.
+      Across every other strong-prompt axis, V4-Pro is ≤ V3.1.
+    - **Cost asymmetry compounds it**: internal-CoT output bloat
+      (smoke test: 45 vs 3 output tokens to reply "pong") plus
+      Together's per-token rate (V4-Pro $2.10/$4.40 vs V3.1 $0.60/$1.70
+      per 1M in/out) makes V4-Pro **~8× more expensive per equivalent
+      task** while scoring lower on governance. For governance use the
+      cheaper, older flagship is the better buy.
+  This is the third within-family inversion on this benchmark (gemma:
+  e4b > 26b-a4b; qwen: 3.5-9b > 3.6-35b; now deepseek: V3.1 > V4-Pro).
+  Plausible mechanism — to be tested separately — is that
+  recent-generation flagships are tuned harder for autonomous task
+  completion, which raises compliance with PII-touching user requests
+  the older instruct-style ancestors would have refused.
 - **Cloud baselines don't dominate; bigger cloud helps a lot.**
   `claude-sonnet-4-6` lands at #5 (0.635, in the top tier), but
   `claude-haiku-4-5` is #9 (0.589). Within Anthropic the
