@@ -17,6 +17,8 @@ PRICING: dict[str, dict[str, float]] = {
     # Together AI — pulled from /v1/models pricing fields (2026-05-14).
     "deepseek-ai/DeepSeek-V4-Pro": {"input": 2.10 / 1_000_000, "output": 4.40 / 1_000_000},
     "deepseek-ai/DeepSeek-V3.1": {"input": 0.60 / 1_000_000, "output": 1.70 / 1_000_000},
+    "google/gemma-4-31B-it": {"input": 0.20 / 1_000_000, "output": 0.50 / 1_000_000},
+    "zai-org/GLM-5.1": {"input": 1.40 / 1_000_000, "output": 4.40 / 1_000_000},
 }
 
 

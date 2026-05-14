@@ -43,6 +43,8 @@ MODEL_META: dict[str, str] = {
     "qwen3.6-35b-a3b@v1": "qwen, MoE 35B/3B (local Q6)",
     "deepseek-v4-pro@v1": "DeepSeek V4 Pro, Together cloud (512K ctx, internal CoT)",
     "deepseek-v3.1@v1": "DeepSeek V3.1, Together cloud (prev-gen flagship, 131K ctx)",
+    "gemma-4-31b-it@v1": "gemma-4 31B dense it, Together cloud (~fp8, 262K ctx)",
+    "glm-5.1@v1": "Zhipu GLM-5.1, Together cloud (~fp4, 202K ctx, internal CoT)",
 }
 
 AXIS_DISPLAY = {
@@ -101,14 +103,38 @@ def bold_if_top(v: float, top: float, *, tied: bool, fmt) -> str:
 
 def build_block(radar: dict, run_id: str) -> str:
     axes: list[str] = radar["axes"]
-    models: list[str] = radar["models"]
+    all_models: list[str] = radar["models"]
     rows: list[dict] = radar["rows"]
+    tracks: list[str] = radar["tracks"]
+
+    # Defensive filter: a model needs data for all tracks to land on the
+    # composite leaderboard. Partial coverage (e.g. an inference timeout that
+    # left single_shot empty) would otherwise divide by zero in the per-track
+    # mean. We skip the model with a stderr note rather than crashing.
+    present: dict[str, set[str]] = defaultdict(set)
+    for r in rows:
+        present[r["model_id"]].add(r["track"])
+    required = set(tracks)
+    models: list[str] = []
+    skipped: list[tuple[str, list[str]]] = []
+    for m in all_models:
+        missing = sorted(required - present.get(m, set()))
+        if missing:
+            skipped.append((m, missing))
+        else:
+            models.append(m)
+    if skipped:
+        for m, ms in skipped:
+            print(f"  skip {m} from leaderboard: missing tracks {ms}", file=sys.stderr)
 
     per_model_axis: dict[tuple[str, str], list[float]] = defaultdict(list)
     per_model_track: dict[tuple[str, str], list[float]] = defaultdict(list)
     per_model_all: dict[str, list[float]] = defaultdict(list)
 
+    model_set = set(models)
     for r in rows:
+        if r["model_id"] not in model_set:
+            continue
         m = r["model_id"]
         t = r["track"]
         missing = [a for a in axes if a not in r["axes"]]

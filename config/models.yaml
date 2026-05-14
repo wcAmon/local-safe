@@ -85,6 +85,25 @@ under_test:
       timeout: 60
       max_retries: 2
     notes: "Together AI cloud, DeepSeek V3.1 (prev-gen flagship, 131K ctx). Cheaper comparison point vs V4-Pro."
+  # NOTE: google/gemma-4-31B-it on Together AI was attempted in v0.9.0 but
+  # repeatedly timed out across cold-start and warmed calls (single-shot
+  # phase). Together's serving appears unstable for this SKU at this time;
+  # entry removed pending provider stabilisation. Existing multi-turn /
+  # agent-loop rows for gemma-4-31b-it@v1 in vault/artifacts are preserved
+  # but excluded from the leaderboard by the defensive filter in
+  # scripts/update_leaderboard.py (missing single_shot track).
+  - model_id: glm-5.1@v1
+    backend: openai_compat
+    api_model: "zai-org/GLM-5.1"
+    base_url_env: TOGETHER_AI_BASE_URL
+    api_key_env: TOGETHER_AI_API_KEY
+    params:
+      temperature: 0.0
+      seed: 42
+      max_tokens: 2048
+      timeout: 90
+      max_retries: 2
+    notes: "Together AI cloud, Zhipu GLM-5.1 (likely fp4 serving, 202K ctx). New family on the board; internal CoT, expect higher output token cost."
   - model_id: claude-haiku-4-5@v1
     backend: anthropic
     api_model: "claude-haiku-4-5-20251001"
